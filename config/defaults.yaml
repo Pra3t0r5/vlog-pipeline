@@ -152,6 +152,7 @@ grade:
   sharp_strength: 0.4
   warm_rb: [0.9, 1.04]
   warm_amount: 0.02
+  vibrance_taper: [0.40, 0.55]   # saturación media del original (0-1): hasta el primero, vibrance completa; desde el segundo, ninguna; en el medio, proporcional. Evita sobresaturar lo que el teléfono ya realzó
   srt_fps: "30000/1001"
   probe_fractions: [0.15, 0.5, 0.85]
   denoise: [[300, "1.5:2:3:3"], [800, "2.5:3:5:5"], [1000000000, "3.5:4:6:6"]]

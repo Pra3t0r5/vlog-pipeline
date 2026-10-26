@@ -291,3 +291,37 @@ class OverlayCheckTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CaptionsPromptTargetTest(unittest.TestCase):
+    def test_captions_prompt_writes_captions_json_not_the_chronology(self):
+        import prompts
+        proj = pathlib.Path(tempfile.mkdtemp())
+        text = prompts.render("captions", proj, {"name": "t"})
+        write = [ln for ln in text.splitlines() if "herramienta Write" in ln]
+        self.assertEqual(len(write), 1)
+        self.assertIn(str(proj / "captions.json"), write[0])
+        self.assertNotIn("chronology.json", write[0])
+
+
+class VibranceTaperTest(unittest.TestCase):
+    def setUp(self):
+        import grade
+        self.grade = grade
+
+    def test_taper_is_full_below_none_above_and_linear_between(self):
+        t = self.grade.vibrance_taper
+        self.assertEqual(t(None), 1.0)
+        self.assertEqual(t(0.30), 1.0)
+        self.assertEqual(t(0.60), 0.0)
+        self.assertAlmostEqual(t(0.475), 0.5, places=2)
+
+    def test_filter_scales_or_drops_vibrance(self):
+        f = self.grade.grade_filter
+        full = f({"profile": "day_phone"}, True)
+        half = f({"profile": "day_phone", "vib_k": 0.5}, True)
+        none = f({"profile": "day_phone", "vib_k": 0.0}, True)
+        self.assertIn("vibrance=intensity=0.18", full)
+        self.assertIn("vibrance=intensity=0.09", half)
+        self.assertNotIn("vibrance", none)
+        self.assertIn("curves=", none)

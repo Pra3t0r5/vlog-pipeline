@@ -174,6 +174,7 @@ Identifican el proyecto; no tienen valor de fábrica.
 | `grade.sharp_strength` | `0.4` | Fuerza del filtro `cas`. |
 | `grade.warm_rb` | `[0.9, 1.04]` | Rango de relación R/B donde el tono medio se considera neutro y recibe calor. |
 | `grade.warm_amount` | `0.02` | Cuánto calor se agrega. |
+| `grade.vibrance_taper` | `[0.40, 0.55]` | Saturación media del original (0 a 1) entre la que la vibrance de los perfiles de día se reduce en proporción: completa hasta el primer valor, nula desde el segundo. Evita sobresaturar tomas que el teléfono ya realzó. |
 | `grade.srt_fps` | `"30000/1001"` | Velocidad con la que se indexan los cuadros del SRT del dron. |
 | `grade.probe_fractions` | `[0.15, 0.5, 0.85]` | Posiciones del shot donde se miden cuadros. |
 | `grade.denoise` | tres tramos | `[[iso_máximo, "hqdn3d"], …]`: reducción de ruido según el ISO. |
