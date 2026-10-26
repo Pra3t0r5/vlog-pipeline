@@ -1,0 +1,18 @@
+#!/bin/bash
+SRC="${BASH_SOURCE[0]}"
+while [ -L "$SRC" ]; do
+  DIR="$(cd "$(dirname "$SRC")" && pwd)"
+  SRC="$(readlink "$SRC")"
+  [[ "$SRC" != /* ]] && SRC="$DIR/$SRC"
+done
+ROOT="$(cd "$(dirname "$SRC")/.." && pwd)"
+if [ -n "${VLOG_PYTHON:-}" ]; then
+  PY="$VLOG_PYTHON"
+elif [ -x "$ROOT/venv/bin/python" ]; then
+  PY="$ROOT/venv/bin/python"
+elif [ -x "$ROOT/.venv/bin/python" ]; then
+  PY="$ROOT/.venv/bin/python"
+else
+  PY="$(command -v python3)"
+fi
+exec "$PY" "$ROOT/pipeline/cli.py" "$@"

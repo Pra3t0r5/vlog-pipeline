@@ -1,0 +1,342 @@
+# vlog-pipeline: valores por defecto.
+#
+# Capas, de menor a mayor prioridad:
+#   1. este archivo
+#   2. configuración de usuario: ~/.config/vlog-pipeline/config.yaml (o la ruta de $VLOG_CONFIG)
+#   3. project.yaml del proyecto
+#   4. (solo estilo, minimapa y captions) el guion.json de cada salida
+# Un project.yaml solo escribe lo que cambia: los mapas se fusionan clave por clave, las listas se reemplazan.
+# `vlog config` imprime el resultado fusionado; `vlog config --defaults` imprime este archivo.
+# Referencia de cada clave: docs/CONFIG.md.
+
+paths:
+  root: null                    # carpeta que contiene los proyectos; $VLOG_ROOT la pisa; null -> ~/vlogs
+  vendor_dir: vendor            # datos descargados (Natural Earth, calles OSM, caché OSRM); relativo al repo
+  naturalearth_dir: null        # null -> <vendor_dir>/naturalearth
+  osm_dir: null                 # null -> <vendor_dir>/osm
+  osrm_cache_dir: null          # null -> <vendor_dir>/osrm-cache
+  originals_dirname: originales # carpeta hermana del proyecto donde `vlog album` descomprime el zip
+
+timezone: null                  # desfase de la hora local del viaje ("+HH:MM"); null -> el del sistema. ingest.tz lo pisa
+
+http:
+  contact: null                 # mail o URL que se agrega al User-Agent de Nominatim, Overpass y OSRM (sus políticas piden identificarse)
+  nominatim_url: https://nominatim.openstreetmap.org/reverse
+  overpass_url: https://overpass-api.de/api/interpreter
+  osrm_url: https://router.project-osrm.org/route/v1/driving/
+
+fonts:
+  main: null                    # .ttf/.ttc para textos del video; null -> la primera de `candidates` que exista
+  ui: null                      # tipografía de hojas de contacto y tiras de review; null -> main
+  candidates:
+    - /System/Library/Fonts/Supplemental/Futura.ttc
+    - /System/Library/Fonts/Helvetica.ttc
+    - /System/Library/Fonts/Supplemental/Arial.ttf
+    - /Library/Fonts/Arial.ttf
+    - /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+    - /usr/share/fonts/dejavu/DejaVuSans.ttf
+
+locale:                         # idioma de las fechas que se dibujan en el video
+  months: [ene, feb, mar, abr, may, jun, jul, ago, sep, oct, nov, dic]
+  months_full: [enero, febrero, marzo, abril, mayo, junio, julio, agosto, septiembre, octubre, noviembre, diciembre]
+  date_format: "{day} de {month}"   # campos: {day}, {month} (nombre completo), {year}
+
+output:
+  fps: "30000/1001"             # fracción o número (30, 29.97)
+
+render:
+  hwaccel: auto                 # auto | none. auto usa -hwaccel videotoolbox si este ffmpeg trae encoders videotoolbox
+  nice: 10                      # prioridad con la que corren los ffmpeg largos
+  shots_per_part:               # cuántos shots codifica cada ffmpeg de ensamble (más shots = más memoria)
+    default: 4
+    preview: 24
+    reel: 8
+
+presets:                        # salidas nativas; codec videotoolbox cae a libx264/libx265 si no existe
+  preview: {w: 960, h: 540, bitrate: 4M, seg_bitrate: 6M, codec: h264_videotoolbox, audio_bitrate: 128k}
+  final: {w: 3840, h: 2160, bitrate: 60M, seg_bitrate: 80M, codec: hevc_videotoolbox, audio_bitrate: 256k}
+  celu: {w: 1920, h: 1080, bitrate: 8M, seg_bitrate: 16M, codec: h264_videotoolbox, audio_bitrate: 160k}
+  chat: {w: 640, h: 360, bitrate: 2M, seg_bitrate: 4M, codec: h264_videotoolbox, audio_bitrate: 64k, max_mb: 28, vmax: 1500000}
+  reel: {w: 1080, h: 1920, bitrate: 12M, seg_bitrate: 30M, codec: h264_videotoolbox, audio_bitrate: 160k, max_s: 90}
+
+style:
+  font: null                    # null -> fonts.main
+  xfade: 0.6
+  transition: fade
+  photo_dur: 3.0
+  card_dur: 3.5
+  zoom_amt: 0.08
+  focus_zoom: 0.14
+  pan_zoom: 0.14
+  bg_sigma: 6
+  bg_dim: 0.55
+  card_dim: 0.4
+  card_color: "#1b1511"
+  aspect_tol: 0.02
+  fade_in: 0.6
+  fade_out: 1.0
+  clip_lufs: -18.0
+  clip_gain_max: 15.0
+  clip_fade: 0.25
+  music_lufs: -16.0
+  music_tp: -1.5
+  music_xfade: 2.0
+  music_fade_in: 1.5
+  music_fade_out: 3.0
+  duck_db: -8.0
+  duck_offset_db: 1.9
+  snap_tolerance: 0.35
+
+minimap:
+  enabled: false
+  size: null                    # fracción del lado corto; si se define pisa presets.*.diameter
+  opacity: 0.6
+  position: top-right           # top-right | top-left | bottom-right | bottom-left
+  label_scale: 0.8
+  radius_km: 120.0              # radio del mapa regional
+  urban_km: 1.2                 # radio del mapa de calles en un pueblo con datos OSM
+  break_on_act: true
+  fade_s: 0.4
+  lat_min: null                 # descarta puntos de la ruta con latitud menor (útil si el recorrido incluye un tramo lejano); null = no filtra
+  simplify_km: 1.5
+  theme: dark
+  accent: [255, 138, 38]
+  labels_max: 3                 # etiquetas de referencia en el mapa regional (las de `always` no cuentan contra el tope)
+  places:
+    natural_earth: {}           # {nombre en Natural Earth: etiqueta mostrada} para sumar ciudades de referencia
+    always: []                  # etiquetas que se muestran siempre que entren en el cuadro
+  geometry:
+    ref_diameter: 230.0
+    line_floor: 0.75
+    dot_min: 2.6
+    label_min_px_map: 9
+    label_min_diameter: 100
+    supersample: 4
+  themes:
+    dark: {base: [18, 24, 32, 205], road: [120, 132, 146, 150], prov: [150, 160, 172, 170], pend: [255, 255, 255, 70]}
+    light: {base: [232, 228, 218, 190], road: [150, 142, 128, 170], prov: [120, 110, 96, 190], pend: [60, 50, 40, 90]}
+  format_defaults:              # tamaños por formato de salida; project.yaml los pisa en minimap.presets.<formato>
+    tv: {diameter: 0.10, label_size: 1.0, label_fit: 1.0, label_min_px: 20, margin_x: 0.025, margin_y: 0.025}
+    celu: {diameter: 0.10, label_size: 1.0, label_fit: 1.0, label_min_px: 12, margin_x: 0.03, margin_y: 0.035}
+    chat: {diameter: 0.14, label_size: 1.0, label_fit: 1.0, label_min_px: 11, margin_x: 0.03, margin_y: 0.05}
+    reel: {diameter: 0.16, label_size: 2.0, label_fit: 1.5, label_min_px: 22, margin_x: 0.05, margin_y: 0.13}
+  presets: {}
+
+caption:
+  min_shot_s: 2.5
+  fade_in_after: 0.5
+  fade_s: 0.5
+  format_defaults:
+    tv: {place: 0.018, line: 0.015, min_place_px: 30, min_line_px: 24, max_w: 0.46, margin_x: 0.04, margin_y: 0.04}
+    celu: {place: 0.022, line: 0.018, min_place_px: 20, min_line_px: 16, max_w: 0.46, margin_x: 0.04, margin_y: 0.05}
+    chat: {place: 0.036, line: 0.030, min_place_px: 12, min_line_px: 10, max_w: 0.55, margin_x: 0.04, margin_y: 0.06}
+    reel: {place: 0.042, line: 0.034, min_place_px: 40, min_line_px: 32, max_w: 0.88, margin_x: 0.06, margin_y: 0.20}
+  presets: {}
+
+grade:
+  sunset: "19:15"               # hora local desde la que una toma sin SRT puede considerarse de noche
+  sample_w: 1024
+  night_iso: 250
+  night_shutter_denominator: 200
+  night_luma: 95.0
+  soft_lap: {drone: 800.0, phone: 1000.0}
+  zoom_frac: 0.25
+  sharp_strength: 0.4
+  warm_rb: [0.9, 1.04]
+  warm_amount: 0.02
+  srt_fps: "30000/1001"
+  probe_fractions: [0.15, 0.5, 0.85]
+  denoise: [[300, "1.5:2:3:3"], [800, "2.5:3:5:5"], [1000000000, "3.5:4:6:6"]]
+  profiles:
+    night: {curve: "0/0 0.04/0.075 0.12/0.2 0.25/0.37 0.45/0.55 0.65/0.68 0.82/0.82 1/1", vibrance: 0.08, warm: false}
+    day_drone: {curve: "0/0 0.06/0.045 0.25/0.235 0.5/0.52 0.75/0.765 0.9/0.9 1/0.98", vibrance: 0.3, vib_first: true, warm: true}
+    day_phone: {curve: "0/0 0.08/0.07 0.3/0.29 0.5/0.51 0.75/0.76 0.9/0.9 1/0.98", vibrance: 0.18, vib_first: true, warm: true}
+
+sheets:
+  preset: null                  # null -> el que fija el modo de costo
+  quality: 78
+  token_div: 750
+  presets:
+    standard: {cols: 6, pw: 192, ph: 144, vw: 160, vh: 90, frames: 6, max_px: 1568, max_tokens: 1200, tag_font: 14, row_font: 24, row_font2: 17}
+    low: {cols: 5, pw: 160, ph: 120, vw: 144, vh: 81, frames: 4, max_px: 1200, max_tokens: 1100, tag_font: 12, row_font: 22, row_font2: 16}
+
+review:
+  cols: 6
+  tile_w: 320
+  tile_h: 180
+  max_h: 1568
+
+prefilter:
+  blurry_z: -1.5
+  variant_phash: 14
+  variant_seconds: 90
+  screenshot_pattern: "screenshot|screen[ _-]?shot|captura de pantalla|screen_recording|screenrecord"
+
+sharpness:
+  long_side: 1024
+  blurry_z: -1.0
+  motion_ratio: 0.25
+  variant_seconds: 90
+  variant_phash: 14
+  frames: 3
+
+triage:
+  kinds: [paisaje, familia, arquitectura, ruta, detalle, ciudad, noche, feria, comida, otro]
+  moods: [neutro, calmo, epico, tierno, feliz, divertido]
+  reject_why: [piso, dedos, pantalla, borroso, oscuro, casi-duplicado, otro]
+
+edit:                           # edición: límites de la EDL y reglas de `vlog edl-check`
+  drone_share_max: 0.45
+  credits_act: Créditos         # nombre exacto del último acto
+  map_clip: build/mapa-4k.mp4   # clip de mapa que edl2guion usa para un shot kind=map si no se pasa --map
+  crossfade_s: 0.6              # fundido que asume la EDL si no declara crossfade_s
+  tie_z: 0.3
+  min_caption_s: 2.5
+  edge_s: 0.3
+  max_drone_run: 3
+
+credits:
+  fallback_title: Créditos
+  map_attribution: "Mapas: © OpenStreetMap contributors · openstreetmap.org/copyright · Natural Earth"
+  map_words: [OpenStreetMap]
+  music_words: [Música, Music]
+
+costmode:
+  default: standard
+  profiles:
+    standard:
+      models: {chronology: haiku, triage_pass1: haiku, triage_pass2: sonnet, code: sonnet, editor: opus, captions: sonnet, reel: sonnet, research: sonnet}
+      sheet_preset: standard
+      editor_rounds: 2
+      preview_iterations: 2
+      music: search
+      research_subagents: true
+      reel: required
+      window_budget: null
+    low:
+      models: {chronology: haiku, triage_pass1: haiku, triage_pass2: sonnet, code: sonnet, editor: sonnet, captions: sonnet, reel: sonnet, research: null}
+      sheet_preset: low
+      editor_rounds: 1
+      preview_iterations: 1
+      music: user_or_list
+      research_subagents: false
+      reel: optional
+      window_budget: 300000
+
+music:
+  default_list: config/music_default.json
+
+workflow:
+  stage_tokens:                 # ESTIMACIONES de tokens por etapa y modo, no mediciones; recalibrar con un video propio
+    brief: {standard: 40000, low: 30000}
+    rutas: {standard: 10000, low: 8000}
+    album: {standard: 8000, low: 6000}
+    ingest: {standard: 25000, low: 15000}
+    proxies: {standard: 5000, low: 5000}
+    chronology: {standard: 150000, low: 100000}
+    prefilter: {standard: 5000, low: 5000}
+    sheets: {standard: 8000, low: 6000}
+    triage1: {standard: 220000, low: 140000}
+    triage2: {standard: 180000, low: 110000}
+    sharpness: {standard: 8000, low: 8000}
+    editor: {standard: 400000, low: 200000}
+    captions: {standard: 60000, low: 40000}
+    music: {standard: 120000, low: 15000}
+    guion: {standard: 20000, low: 15000}
+    preview: {standard: 80000, low: 50000}
+    preview_ok: {standard: 0, low: 0}
+    final: {standard: 30000, low: 30000}
+    reel: {standard: 120000, low: 80000}
+
+ingest:
+  tz: null                      # "+HH:MM"; null -> timezone, y si tampoco, el del sistema
+  start_date: ""
+  end_date: ""
+  owners: []                    # ["regex=nombre"]: asigna un dispositivo (modelo EXIF o nombre de archivo si el regex empieza con ^) a una fuente
+  clock_offsets: []             # ["fuente=segundos"]: corrige el reloj de un dispositivo
+  duplicate_seconds: 120
+  duplicate_phash_same_source: 2
+  duplicate_phash_cross_source: 6
+  burst_seconds: 10
+  burst_phash: 10
+  route_gap_min: 20
+  visit_conflict_m: 500
+  geocode: true
+  geocode_language: es
+  geocode_delay_s: 1.1
+  geocode_cell_deg: [0.009, 0.01]
+  exclude_name_patterns:
+    screenshot: "^screenshot"
+    generated_highlight: "VIDEO_HIGHLIGHT"
+    drone_app_cache: "^dji_fly_.*video_cache"
+  cluster_gap_s: 2700
+  cluster_km: 3
+
+proxies:
+  drone: {w: 640, h: 360, bitrate: 1500k}
+  phone: {w: 640, h: 360, bitrate: 1200k, audio_bitrate: 64k, max_parallel_ffmpeg: 2}
+
+storage:
+  originals_dir: null
+  album_dir: null
+  album_name: null
+
+route:
+  export_file: Rutas.json       # nombre con el que se guarda la exportación del teléfono dentro de <proyecto>/route/
+  device_dir: /sdcard/Download
+
+adb:
+  entry_label: Rutas
+  export_label: Exportar datos de Rutas
+  forbidden_words: [borrar, delete]
+  file_pattern: "^(Rutas|Timeline)[^/]*\\.json$"
+  settings_action: android.settings.LOCATION_SOURCE_SETTINGS
+  timeout_s: 180
+
+routefill:
+  min_interval_s: 1.2
+  gap_min: 15.0
+  gap_min_km: 1.5
+  speed_kmh: 120.0
+  speed_min_km: 1.0
+  jump_km: 5.0
+  flight_km: 150.0
+  feasible_kmh: 95.0
+  road_dev_m: 150.0
+  road_ratio: 1.06
+  reject_ratio: 2.2
+  reject_extra_km: 4.0
+  off_corridor_km: 1.5
+  drone_off_km: 4.0
+  raw_acc_m: 100
+  visit_contradict_km: 3.0
+  chain_max_coords: 24
+  bridge_max_segs: 4
+  simplify_m: 12.0
+  enroute_pattern: "(camino a|hacia|rumbo a)\\b"   # un caption cuyo lugar empieza así se considera "en camino", no "llegó"
+  attribution: "Routing: OSRM demo server (FOSSGIS). Road data (c) OpenStreetMap contributors, ODbL."
+  check_views: []               # [{title: ..., bbox: [lat_min, lat_max, lon_min, lon_max]}] para `routefill.py --check-image`
+
+osm:
+  towns: {}                     # {nombre: [lat, lon, radio_en_grados]} para `vlog osm`; ver docs/CONFIG.md
+
+routemap:
+  pad_deg: 0.35
+  fps: 30
+  background: [236, 226, 208]
+  province_line: [170, 150, 125]
+  road_line: [205, 190, 168]
+  route_line: [200, 60, 40]
+  attribution: Made with Natural Earth
+
+musicmix:
+  default_target_s: 480.0
+  sr: 48000
+  win_beats: 8
+  min_play_bars: 4
+  min_loop_s: 10.0
+  head_trim_cap: 1.0
+  lag_ms: 30
+  search_tol_s: 0.4
+  gap_bars: 16
+  loudnorm: {lufs: -16.0, tp: -1.5, lra: 11.0}

@@ -1,0 +1,73 @@
+# Ejemplo de project.yaml para un viaje ficticio. Copiá lo que necesites a tu proyecto:
+# `vlog new <nombre>` crea uno mínimo; todo lo que no escribas toma el valor de config/defaults.yaml.
+# Referencia de cada clave: docs/CONFIG.md.
+
+name: ruta-costera
+title: Ruta costera
+theme: Una semana de ruta por la costa con amigos
+audience: amigos y familia, en un televisor
+cost_mode: low                       # standard | low
+
+duration: {target_min: 7, floor_min: 4.9, ceil_min: 9.8}
+output:
+  fps: "30000/1001"
+  final: {w: 3840, h: 2160}
+
+sources:
+  drone: /Volumes/<TARJETA_SD>/       # tarjeta o carpeta del dron; se lee en solo lectura
+  album_zip: ~/Downloads/album.zip
+
+ingest:
+  start_date: "2025-06-10"
+  end_date: "2025-06-17"
+  tz: "+02:00"                        # zona horaria de las fotos y los videos sin offset
+  owners:                             # regex=fuente: asigna cada dispositivo a una "fuente"
+    - "^IMG_=phone_a"                 # empieza con ^: se prueba contra el nombre del archivo
+    - "Pixel 8=phone_b"               # si no, contra el modelo EXIF del dispositivo
+  clock_offsets:
+    - "phone_b=-95"                   # el reloj de phone_b estaba 95 s adelantado
+
+people: [alice, bob]                  # nombres (en minúscula) que pueden aparecer en las tomas
+
+prefilter: {blurry_z: -1.5}
+sheets: {preset: low}
+edit: {drone_share_max: 0.4}
+edl: edl.json
+guion: guion.json
+
+outputs:
+  - tv
+  - celu
+  - chat
+  - {preset: reel, guion: guion-reel.json}
+
+minimap:
+  enabled: true
+  position: top-right
+  lat_min: -60.0                      # descarta puntos de la ruta al sur de esta latitud (el viaje de ida, por ejemplo)
+  places:
+    natural_earth: {"Springfield": "Springfield"}   # ciudades de referencia del mapa regional (nombre en Natural Earth: etiqueta)
+    always: ["Springfield"]
+  presets:
+    reel: {diameter: 0.18}
+
+caption:
+  presets:
+    tv: {place: 0.02}
+
+osm:
+  towns:                              # para `vlog osm`: [lat, lon, radio en grados]
+    example_town: [0.0, 0.0, 0.03]    # reemplazá por las coordenadas de un pueblo del viaje
+
+routefill:
+  check_views:
+    - {title: Recorrido completo, bbox: [-1.0, 1.0, -1.0, 1.0]}
+
+storage:
+  originals_dir: /Volumes/<DISCO>/originales
+
+fonts:
+  main: null                          # un .ttf/.ttc propio; null busca una de las tipografías del sistema
+
+http:
+  contact: you@example.com            # se agrega al User-Agent de Nominatim, Overpass y OSRM
