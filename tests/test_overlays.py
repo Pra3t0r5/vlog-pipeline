@@ -72,6 +72,77 @@ class ParseTest(unittest.TestCase):
             make([{"id": "drone.A", "dur": 5, "focus_x": 1.5}])
 
 
+class BesideLayoutTest(unittest.TestCase):
+    def geo(self, position):
+        return minimap.beside_geometry(minimap.cfg_with({"layout": "beside", "position": position}), "tv", (3840, 2160))
+
+    def test_bad_layout_rejected(self):
+        with self.assertRaises(ValueError):
+            minimap.cfg_with({"layout": "stacked"})
+
+    def test_text_column_sits_beside_the_circle_and_centered_on_it(self):
+        b = self.geo("bottom-left")
+        self.assertGreater(b["tx"], b["left"] + b["D"])
+        self.assertEqual(b["align"], "left")
+        mid = b["top"] + b["D"] // 2
+        self.assertLessEqual(abs((b["label_top"] + b["desc_top"]) / 2 - mid), 1)
+        self.assertLess(b["label_top"], mid)
+        self.assertGreater(b["desc_top"], mid)
+
+    def test_right_position_mirrors_the_column(self):
+        b = self.geo("bottom-right")
+        self.assertLess(b["tx"], b["left"])
+        self.assertEqual(b["align"], "right")
+
+    def test_long_label_starts_at_the_column_edge_not_centered_under_the_circle(self):
+        cfg = {"layout": "beside", "position": "bottom-left"}
+        b = self.geo("bottom-left")
+        disc = lambda *a, **k: minimap.Image.new("RGBA", (b["D"] * 4, b["D"] * 4), (40, 40, 40, 255))
+        with mock.patch.object(minimap, "urban_town", return_value=None), mock.patch.object(minimap, "_circle", side_effect=disc):
+            ov = minimap.render_overlay("2026-02-23T12:00:00", -41.13, -71.30, "Costanera de Bariloche", (3840, 2160), cfg=cfg)
+        a = ov.getchannel("A")
+        text = a.crop((b["tx"] - 40, 0, 3840, 2160)).getbbox()
+        self.assertIsNotNone(text)
+        self.assertLessEqual(abs(text[0] + b["tx"] - 40 - b["tx"]), 40)
+        circle = a.crop((0, 0, b["tx"] - 40, 2160)).getbbox()
+        self.assertLess(circle[0], b["left"])
+
+    def test_caption_desc_shares_the_column(self):
+        b = self.geo("bottom-left")
+        lay = overlay.caption_layout(None, ["De origen glaciar"], 3840, 2160, minimap.config.font("main"), None, "tv", b)
+        x, y = overlay.desc_xy(lay, "De origen glaciar")
+        self.assertEqual(x, b["tx"] - lay["pad"])
+        self.assertEqual(y, b["desc_top"] - lay["pad"])
+
+    def test_right_aligned_caption_ends_at_the_column(self):
+        b = self.geo("bottom-right")
+        lay = overlay.caption_layout(None, ["De origen glaciar"], 3840, 2160, minimap.config.font("main"), None, "tv", b)
+        x, _ = overlay.desc_xy(lay, "De origen glaciar")
+        w = int(lay["line_font"].getlength("De origen glaciar")) + 2 * lay["pad"]
+        self.assertEqual(x + w - lay["pad"], b["tx"])
+
+
+class TitleClearanceTest(unittest.TestCase):
+    def intervals(self, position):
+        G = make_project([{"id": "drone.A", "dur": 12, "title": {"text": "Lugar", "sub": "1 de marzo"}}], extra={"minimap": {"enabled": True, "position": position}})
+        rep = ffx.Report()
+        return G, render.minimap_intervals(G, rep)
+
+    def test_bottom_minimap_waits_for_the_act_title(self):
+        G, iv = self.intervals("bottom-left")
+        if not iv:
+            self.skipTest("el proyecto de prueba no tiene ruta para el minimapa")
+        s = G.shots[iv[0]["idx"]]
+        self.assertGreaterEqual(iv[0]["f0"], s.start + round(render.title_end(s, s.n / float(G.fps)) * float(G.fps)))
+
+    def test_top_minimap_does_not_wait(self):
+        G, iv = self.intervals("top-right")
+        if not iv:
+            self.skipTest("el proyecto de prueba no tiene ruta para el minimapa")
+        s = G.shots[iv[0]["idx"]]
+        self.assertEqual(iv[0]["f0"], s.start + s.xn)
+
+
 class PlanTest(unittest.TestCase):
     def plan(self, shots, **kw):
         G = make_project(shots, extra={"minimap": {"enabled": True}}, **kw)

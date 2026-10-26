@@ -113,6 +113,9 @@ Identifican el proyecto; no tienen valor de fábrica.
 | `minimap.size` | `null` | Fracción del lado corto del cuadro; si se define, pisa `diameter` en todos los formatos. |
 | `minimap.opacity` | `0.6` | Opacidad del círculo. |
 | `minimap.position` | `top-right` | `top-right`, `top-left`, `bottom-right` o `bottom-left`. |
+| `minimap.layout` | `corner` | `corner`: el minimapa en su esquina, con el lugar y la fecha debajo, y las captions abajo a la izquierda. `beside`: un solo bloque, el minimapa con el lugar, la fecha y la descripción a su costado, del lado que diga `position` (a la derecha del círculo en `*-left`, alineado a la derecha en `*-right`). |
+| `minimap.beside_gap` | `0.12` | `beside`: separación entre el círculo y el texto, en fracciones del diámetro. |
+| `minimap.beside_text_w` | `0.40` | `beside`: ancho máximo del texto (lugar y descripción), en fracción del ancho del cuadro. |
 | `minimap.label_scale` | `1.0` | Multiplica el tamaño de la etiqueta respecto de la escala tipográfica compartida con los captions (`caption.format_defaults`). El tamaño es fijo por formato: no se ajusta al largo del texto. |
 | `minimap.suppress_redundant_place` | `true` | Si un título o una tarjeta del acto ya nombra el lugar, la etiqueta muestra solo la fecha. |
 | `minimap.radius_km` | `120.0` | Radio del mapa regional. |

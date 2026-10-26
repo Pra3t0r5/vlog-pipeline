@@ -292,6 +292,7 @@ def label_rows(place, time_art, pr, font_path):
 
 FORMATS = ("tv", "celu", "chat", "reel")
 POSITIONS = ("top-right", "top-left", "bottom-right", "bottom-left")
+LAYOUTS = ("corner", "beside")
 REV = "m4"
 LEGACY_KEYS = ("enabled", "size", "opacity", "position", "label_scale", "radius_km", "urban_km", "break_on_act", "presets")
 
@@ -324,6 +325,8 @@ def cfg_with(*layers):
                 out[k] = v
     if out["position"] not in POSITIONS:
         raise ValueError(f"minimap.position debe ser uno de {POSITIONS}")
+    if out["layout"] not in LAYOUTS:
+        raise ValueError(f"minimap.layout debe ser uno de {LAYOUTS}")
     for fmt in out["presets"]:
         if fmt not in FORMATS:
             raise ValueError(f"minimap.presets.{fmt}: formato desconocido (válidos: {FORMATS})")
@@ -349,6 +352,26 @@ def params(cfg, fmt, frame, typo=None):
     )
 
 
+def beside_geometry(cfg, fmt, frame, typo=None):
+    W, H = frame
+    pr = params(cfg, fmt, frame, typo)
+    D = pr["D"]
+    gap = overlay.spacing(pr["fp"], pr["fl"])[1]
+    right = cfg["position"].endswith("right")
+    left = W - pr["mx"] - D if right else pr["mx"]
+    top = pr["my"] if cfg["position"].startswith("top") else H - pr["my"] - D
+    gutter = round(D * cfg["beside_gap"])
+    mid = top + D // 2
+    half = (pr["fp"] + pr["fl"] + 2 * gap) // 2
+    return {
+        "left": left, "top": top, "D": D,
+        "tx": left - gutter if right else left + D + gutter,
+        "text_w": W * cfg["beside_text_w"],
+        "label_top": mid - half, "desc_top": mid + half,
+        "align": "right" if right else "left",
+    }
+
+
 def render_overlay(time_art, lat, lon, place, frame=(1920, 1080), theme="dark", route_path=None, labels=None, out=None, cfg=None, fmt="tv", typo=None, font=None):
     cfg = cfg_with(cfg or {})
     W, H = frame
@@ -371,18 +394,25 @@ def render_overlay(time_art, lat, lon, place, frame=(1920, 1080), theme="dark", 
     cv = cv.resize((cv.width // SS, cv.height // SS), Image.LANCZOS)
     cv.putalpha(cv.getchannel("A").point(lambda v: int(v * cfg["opacity"])))
 
-    lab = overlay.block_image(label_rows(place, time_art, pr, font or config.font("main")), pr["fp"], pr["fl"], align="center", min_w=D)
     pad = overlay.spacing(pr["fp"], pr["fl"])[0]
-    lw, lh = lab.size
-
-    mx, my = pr["mx"], pr["my"]
-    position = cfg["position"]
-    stack = D + glow_pad // 2 - pad + lh
-    cx = W - mx - D - glow_pad if position.endswith("right") else mx - glow_pad
-    cy = my - glow_pad if position.startswith("top") else H - my - stack - glow_pad
-    lx = cx + glow_pad + D // 2 - lw // 2
-    lx = min(max(lx, mx - pad), W - mx + pad - lw)
-    ly = cy + glow_pad + D + glow_pad // 2 - pad
+    if cfg["layout"] == "beside":
+        b = beside_geometry(cfg, fmt, frame, typo)
+        lab = overlay.block_image(label_rows(place, time_art, {**pr, "label_w": b["text_w"]}, font or config.font("main")), pr["fp"], pr["fl"], align=b["align"])
+        lw, lh = lab.size
+        cx, cy = b["left"] - glow_pad, b["top"] - glow_pad
+        lx = b["tx"] + pad - lw if b["align"] == "right" else b["tx"] - pad
+        ly = b["label_top"] - pad
+    else:
+        lab = overlay.block_image(label_rows(place, time_art, pr, font or config.font("main")), pr["fp"], pr["fl"], align="center", min_w=D)
+        lw, lh = lab.size
+        mx, my = pr["mx"], pr["my"]
+        position = cfg["position"]
+        stack = D + glow_pad // 2 - pad + lh
+        cx = W - mx - D - glow_pad if position.endswith("right") else mx - glow_pad
+        cy = my - glow_pad if position.startswith("top") else H - my - stack - glow_pad
+        lx = cx + glow_pad + D // 2 - lw // 2
+        lx = min(max(lx, mx - pad), W - mx + pad - lw)
+        ly = cy + glow_pad + D + glow_pad // 2 - pad
     ov = Image.new("RGBA", frame, (0, 0, 0, 0))
     ov.alpha_composite(cv, (cx, cy))
     ov.alpha_composite(lab, (lx, ly))

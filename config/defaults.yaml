@@ -92,6 +92,9 @@ minimap:
   size: null                    # fracción del lado corto; si se define pisa presets.*.diameter
   opacity: 0.6
   position: top-right           # top-right | top-left | bottom-right | bottom-left
+  layout: corner                # corner: minimapa en su esquina y captions abajo a la izquierda | beside: el texto (lugar, fecha y descripción) al costado del minimapa, en un solo bloque
+  beside_gap: 0.12              # beside: separación entre el círculo y el texto, en fracciones del diámetro
+  beside_text_w: 0.40           # beside: ancho máximo del texto, en fracción del ancho del cuadro
   label_scale: 1.0              # multiplica el tamaño de la etiqueta respecto de la escala tipográfica compartida con los captions
   suppress_redundant_place: true  # si un título o una tarjeta del acto ya nombra el lugar, la etiqueta muestra solo la fecha
   radius_km: 120.0              # radio del mapa regional

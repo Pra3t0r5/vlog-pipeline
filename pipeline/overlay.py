@@ -76,7 +76,7 @@ def block_image(rows, fp, fl, align="left", min_w=0):
     drop = max(2, fp // 25)
     y = pad
     for t, f, a in rows:
-        x = pad if align == "left" else (lw - f.getlength(t)) / 2
+        x = pad if align == "left" else lw - pad - f.getlength(t) if align == "right" else (lw - f.getlength(t)) / 2
         ImageDraw.Draw(sh).text((x, y + drop), t, font=f, fill=255)
         ImageDraw.Draw(st).text((x, y), t, font=f, fill=255, stroke_width=1, stroke_fill=255)
         ImageDraw.Draw(fg).text((x, y), t, font=f, fill=(255, 255, 255, a))
@@ -89,37 +89,42 @@ def block_image(rows, fp, fl, align="left", min_w=0):
     return im
 
 
-def caption_layout(place, lines, W, H, font_path, cfg=None, fmt="tv"):
+def caption_layout(place, lines, W, H, font_path, cfg=None, fmt="tv", column=None):
     pr = params(cfg, fmt, (W, H))
     fp, fl = pr["fp"], pr["fl"]
     place_font = ImageFont.truetype(font_path, fp)
     line_font = ImageFont.truetype(font_path, fl)
     pad, gap = spacing(fp, fl)
-    place_rows = wrap_balanced(place, place_font, pr["maxw"], 2) if place else []
-    desc_rows = {ln: wrap(ln, line_font, pr["maxw"]) for ln in lines}
+    maxw = pr["maxw"] if column is None else min(pr["maxw"], column["text_w"])
+    place_rows = wrap_balanced(place, place_font, maxw, 2) if place else []
+    desc_rows = {ln: wrap(ln, line_font, maxw) for ln in lines}
+    lay = {"pr": pr, "pad": pad, "gap": gap, "place_font": place_font, "line_font": line_font, "place_rows": place_rows, "desc_rows": desc_rows}
+    if column is not None:
+        return {**lay, "place_top": column["label_top"], "desc_top": column["desc_top"], "tx": column["tx"], "align": column["align"]}
     slot_h = max((len(r) for r in desc_rows.values()), default=0) * (fl + gap)
     bottom = H - pr["my"]
-    return {
-        "pr": pr, "pad": pad, "gap": gap, "place_font": place_font, "line_font": line_font,
-        "place_rows": place_rows, "desc_rows": desc_rows,
-        "place_top": bottom - slot_h - len(place_rows) * (fp + gap), "desc_top": bottom - slot_h,
-        "x": pr["mx"] - pad,
-    }
+    return {**lay, "place_top": bottom - slot_h - len(place_rows) * (fp + gap), "desc_top": bottom - slot_h, "tx": pr["mx"], "align": "left"}
+
+
+def _x(lay, rows, font):
+    if lay["align"] == "right":
+        return lay["tx"] + lay["pad"] - (int(max(font.getlength(t) for t in rows)) + 2 * lay["pad"])
+    return lay["tx"] - lay["pad"]
 
 
 def place_xy(lay):
-    return lay["x"], lay["place_top"] - lay["pad"]
+    return _x(lay, lay["place_rows"], lay["place_font"]), lay["place_top"] - lay["pad"]
 
 
-def desc_xy(lay):
-    return lay["x"], lay["desc_top"] - lay["pad"]
+def desc_xy(lay, line):
+    return _x(lay, lay["desc_rows"][line], lay["line_font"]), lay["desc_top"] - lay["pad"]
 
 
 def place_png(lay, out):
     rows = [(t, lay["place_font"], 255) for t in lay["place_rows"]]
-    block_image(rows, lay["pr"]["fp"], lay["pr"]["fl"]).save(out, compress_level=1)
+    block_image(rows, lay["pr"]["fp"], lay["pr"]["fl"], align=lay["align"]).save(out, compress_level=1)
 
 
 def desc_png(lay, line, out):
     rows = [(t, lay["line_font"], 205) for t in lay["desc_rows"][line]]
-    block_image(rows, lay["pr"]["fp"], lay["pr"]["fl"]).save(out, compress_level=1)
+    block_image(rows, lay["pr"]["fp"], lay["pr"]["fl"], align=lay["align"]).save(out, compress_level=1)

@@ -150,6 +150,8 @@ def minimap_intervals(G, report, plans=None):
             s = shots[i]
             first, last = j == 0, j == len(run) - 1
             f0 = s.start + s.xn if first else s.start + s.xn // 2
+            if first and s.title and plans[i]["cfg"]["position"].startswith("bottom"):
+                f0 = max(f0, s.start + round(title_end(s, s.n / float(fps)) * float(fps)))
             if not last:
                 f1 = shots[i + 1].start + shots[i + 1].xn // 2
             else:
@@ -178,6 +180,13 @@ def title_end(s, dur):
     if not s.title:
         return None
     return s.title.get("dur", min(3.5, dur)) + 0.5
+
+
+def caption_column(G):
+    cfg = minimap.cfg_with(G.minimap)
+    if not cfg["enabled"] or cfg["layout"] != "beside":
+        return None
+    return minimap.beside_geometry(cfg, G.fmt, (G.W, G.H), overlay.params(G.caption_cfg, G.fmt, (G.W, G.H)))
 
 
 def caption_intervals(G, plans, report):
@@ -216,7 +225,7 @@ def caption_intervals(G, plans, report):
         lines = [sg["text"] for sg in plan["segments"]]
         if not place and not lines:
             continue
-        lay = overlay.caption_layout(place, lines, G.W, G.H, G.style["font"], G.caption_cfg, G.fmt)
+        lay = overlay.caption_layout(place, lines, G.W, G.H, G.style["font"], G.caption_cfg, G.fmt, caption_column(G))
         base = [G.W, G.H, G.style["font"], lay["pr"]]
         end = G.total_frames
 
@@ -234,7 +243,7 @@ def caption_intervals(G, plans, report):
         if place:
             add("place", place, plan["a"], plan["b"], overlay.place_xy(lay), lambda png: overlay.place_png(lay, png))
         for sg in plan["segments"]:
-            add("desc", sg["text"], sg["start"], sg["end"], overlay.desc_xy(lay), lambda png, sg=sg: overlay.desc_png(lay, sg["text"], png))
+            add("desc", sg["text"], sg["start"], sg["end"], overlay.desc_xy(lay, sg["text"]), lambda png, sg=sg: overlay.desc_png(lay, sg["text"], png))
     return out
 
 
