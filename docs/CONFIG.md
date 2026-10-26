@@ -113,7 +113,8 @@ Identifican el proyecto; no tienen valor de fábrica.
 | `minimap.size` | `null` | Fracción del lado corto del cuadro; si se define, pisa `diameter` en todos los formatos. |
 | `minimap.opacity` | `0.6` | Opacidad del círculo. |
 | `minimap.position` | `top-right` | `top-right`, `top-left`, `bottom-right` o `bottom-left`. |
-| `minimap.label_scale` | `0.8` | Escala del texto de la etiqueta (lugar y fecha). |
+| `minimap.label_scale` | `1.0` | Multiplica el tamaño de la etiqueta respecto de la escala tipográfica compartida con los captions (`caption.format_defaults`). El tamaño es fijo por formato: no se ajusta al largo del texto. |
+| `minimap.suppress_redundant_place` | `true` | Si un título o una tarjeta del acto ya nombra el lugar, la etiqueta muestra solo la fecha. |
 | `minimap.radius_km` | `120.0` | Radio del mapa regional. |
 | `minimap.urban_km` | `1.2` | Radio del mapa de calles cuando hay datos OSM del pueblo. |
 | `minimap.break_on_act` | `true` | Un cambio de acto corta la racha de minimapa continuo. |
@@ -127,18 +128,34 @@ Identifican el proyecto; no tienen valor de fábrica.
 | `minimap.places.always` | `[]` | Etiquetas que se dibujan siempre que entren en el cuadro, sin contar contra `labels_max`. |
 | `minimap.geometry` | ver archivo | Constantes de dibujo: `ref_diameter`, `line_floor`, `dot_min`, `label_min_px_map`, `label_min_diameter`, `supersample`. |
 | `minimap.themes` | `dark`, `light` | Colores RGBA de cada paleta (`base`, `road`, `prov`, `pend`). |
-| `minimap.format_defaults` | ver archivo | Tamaños por formato (`tv`, `celu`, `chat`, `reel`): `diameter`, `label_size`, `label_fit`, `label_min_px`, `margin_x`, `margin_y`. |
+| `minimap.format_defaults` | ver archivo | Por formato (`tv`, `celu`, `chat`, `reel`): `diameter` (fracción del lado corto: tv 0,14), `label_size` (multiplicador de la escala compartida), `label_max_w` (ancho máximo de la etiqueta, fracción del ancho; el lugar se parte en 2 renglones en límites de palabra, nunca se achica) y `margin_x`/`margin_y` (`null` hereda los de `caption.format_defaults`: mismo margen seguro). |
 | `minimap.presets` | `{}` | Lo que cambia tu proyecto sobre `format_defaults`, por formato. |
 
 ### Captions (`caption`)
 
 | Clave | Defecto | Qué hace |
 |---|---|---|
-| `caption.min_shot_s` | `2.5` | Un shot más corto no lleva caption. |
+| `caption.min_shot_s` | `2.5` | Una racha de captions más corta (en segundos) no lleva texto. |
 | `caption.fade_in_after` | `0.5` | Espera tras verse entero el shot antes de entrar. |
-| `caption.fade_s` | `0.5` | Duración de entrada y de salida. |
-| `caption.format_defaults` | ver archivo | Por formato: `place`, `line` (fracción del lado corto), `min_place_px`, `min_line_px`, `max_w`, `margin_x`, `margin_y`. |
+| `caption.fade_s` | `0.5` | Duración del fundido del lugar al empezar y terminar la racha, y del fundido cruzado entre descripciones. No hay fundido en cada corte. |
+| `caption.suppress_redundant_place` | `true` | No dibuja el lugar si ya lo nombra un título, una tarjeta del acto o la etiqueta del minimapa del mismo shot. |
+| `caption.min_line_s` | `1.5` | Permanencia mínima de una descripción: `min_line_s` + `line_s_per_word` por palabra. |
+| `caption.line_s_per_word` | `0.3` | Segundos extra por palabra de la descripción. |
+| `caption.on_short_shot` | `persist` | `persist`: la descripción de un shot demasiado corto sigue en el shot siguiente de la racha; `skip`: se omite. En ambos casos los shots cortos de una racha muestran solo el lugar. |
+| `caption.format_defaults` | ver archivo | Escala tipográfica fija por formato, compartida con la etiqueta del minimapa. `place` (lugar, y su renglón en la etiqueta) y `line` (descripción, y la fecha) son fracciones del lado corto (tv: 0,0252 y 0,021, es decir 54 y 45 px en 4K); `min_place_px`/`min_line_px` son pisos para cuadros chicos; `max_w` es el ancho máximo (fracción del ancho); `margin_x`/`margin_y` definen el área segura común. |
 | `caption.presets` | `{}` | Lo que cambia tu proyecto sobre `format_defaults`, por formato. |
+
+### Ritmo (`pacing`)
+
+`pacing: relaxed` (o `standard`) en `project.yaml` equivale a `pacing.mode`. El modo `relaxed`, pensado para espectadores mayores frente a una TV, multiplica por 1,3 las duraciones objetivo por plano y baja en la misma proporción el tope de cortes por minuto. Lo leen `vlog prompt editor` y `vlog edl-check`; el render no cambia las duraciones que ya trae el guion.
+
+| Clave | Defecto | Qué hace |
+|---|---|---|
+| `pacing.mode` | `relaxed` | `relaxed` o `standard`. |
+| `pacing.multiplier` | `{relaxed: 1.3, standard: 1.0}` | Factor sobre los rangos de `pacing.targets` según el modo. |
+| `pacing.targets` | ver archivo | `[mínimo, máximo]` en segundos en modo standard, por tipo de plano: `drone` 4 a 6, `photo` 2,5 a 4, `hero` 4 a 4,5, `phone` 3 a 8. En `relaxed` resultan drone 5 a 8, photo 3,5 a 5, hero 5 a 6, phone 4 a 10,5 (redondeados a 0,5 s). |
+| `pacing.min_shot_s` | `null` | Si se define, es el plano más corto que tolera `edl-check` para todos los tipos y pisa el mínimo de cada rango. |
+| `pacing.max_cuts_per_min` | `18` | Cortes por minuto en standard; el tope efectivo es este valor dividido por el multiplicador (13,8 en relaxed). |
 
 ### Color y nitidez (`grade`)
 

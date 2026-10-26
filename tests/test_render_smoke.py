@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
@@ -48,6 +48,26 @@ class RenderSmoke(unittest.TestCase):
         self.assertAlmostEqual(pr["dur"], 2 + 3 + 3 - 2 * 0.6, delta=0.15)
         again = subprocess.run([sys.executable, str(ROOT / "pipeline" / "render.py"), str(self.proj / "guion.json"), "preview"], capture_output=True, text=True)
         self.assertIn("caché: segmentos 3 hit / 0 build", again.stdout)
+
+    def render_frame(self, name, shots, at):
+        g = self.proj / f"{name}.json"
+        g.write_text(json.dumps({"name": name, "out_dir": "out", "grading": False, "shots": shots}))
+        r = subprocess.run([sys.executable, str(ROOT / "pipeline" / "render.py"), str(g), "preview"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        png = self.proj / f"{name}.png"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(at), "-i", str(self.proj / "out" / f"{name}-preview.mp4"), "-frames:v", "1", str(png)], check=True)
+        return Image.open(png).convert("RGB")
+
+    def test_caption_run_is_drawn_over_the_cut_in_the_corner(self):
+        plain = [{"id": "phone_a.clip", "in": 0, "out": 3, "audio": "mute"}, {"id": "phone_a.clip", "in": 0, "out": 3, "audio": "mute", "transition": "cut"}]
+        withcap = [dict(plain[0], caption={"place": "Lugar de prueba", "line": "Una frase de prueba"}), dict(plain[1], caption={"place": "Lugar de prueba", "line": "Otra frase distinta"})]
+        a = self.render_frame("plain", plain, 2.0)
+        b = self.render_frame("caps", withcap, 2.0)
+        box = (0, 380, 480, 540)
+        diff = sum(ImageChops.difference(a.crop(box), b.crop(box)).resize((1, 1), Image.BOX).getpixel((0, 0))) * 480 * 160
+        self.assertGreater(diff, 20000)
+        far = (480, 0, 960, 200)
+        self.assertIsNone(ImageChops.difference(a.crop(far), b.crop(far)).getbbox())
 
     def test_project_font_override_changes_nothing_when_it_is_the_same_font(self):
         import config

@@ -9,7 +9,7 @@ import yaml
 REPO = pathlib.Path(__file__).resolve().parent.parent
 DEFAULTS_FILE = REPO / "config" / "defaults.yaml"
 USER_FILE = pathlib.Path.home() / ".config" / "vlog-pipeline" / "config.yaml"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 NE_FILES = ("ne_10m_roads.geojson", "ne_10m_admin_1_states_provinces.geojson", "ne_10m_populated_places_simple.geojson")
 
 _base = None
@@ -31,6 +31,12 @@ def deep_merge(base, over):
         else:
             out[k] = copy.deepcopy(v)
     return out
+
+
+def normalize(layer):
+    if isinstance(layer, dict) and isinstance(layer.get("pacing"), str):
+        return {**layer, "pacing": {"mode": layer["pacing"]}}
+    return layer
 
 
 def load_yaml(path):
@@ -75,13 +81,13 @@ def base():
         if uf is not None:
             if not uf.exists():
                 raise ConfigError(f"VLOG_CONFIG apunta a {uf}, que no existe")
-            cfg = deep_merge(cfg, load_yaml(uf))
+            cfg = deep_merge(cfg, normalize(load_yaml(uf)))
         _base = cfg
     return copy.deepcopy(_base)
 
 
 def build(project_cfg=None):
-    return deep_merge(base(), project_cfg or {})
+    return deep_merge(base(), normalize(project_cfg) or {})
 
 
 def activate(project_cfg=None):

@@ -2,6 +2,7 @@ import json, math, pathlib, datetime
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 import config
+import overlay
 
 MAJOR = {"motorway", "trunk", "primary", "secondary", "motorway_link", "trunk_link", "primary_link"}
 SKIP = {"footway", "path", "steps", "cycleway", "pedestrian", "bridleway", "corridor", "service", "track"}
@@ -279,36 +280,19 @@ def _circle(time_art, lat, lon, route_path, theme, D, labels, radius_km, cfg):
     return im
 
 
-def _fit(text, size_px, target):
-    f = _font(100)
-    return 100 * target / f.getlength(text)
-
-
-def _label_lines(place, time_art, D, S, size_mult, fit_mult, min_px):
-    lo = max(min_px, S * 0.011 * size_mult)
-    hi = max(lo, S * 0.020 * size_mult)
-    t = _parse(time_art)
-    date = config.get("locale.date_format").format(day=t.day, month=config.get("locale.months_full")[t.month - 1], year=t.year)
-    target = D * fit_mult
-    size = _fit(place, 0, target)
-    parts = [place]
-    if size < lo and " " in place:
-        words = place.split()
-        best = min(range(1, len(words)), key=lambda i: abs(len(" ".join(words[:i])) - len(" ".join(words[i:]))))
-        parts = [" ".join(words[:best]), " ".join(words[best:])]
-        size = min(_fit(x, 0, target) for x in parts)
-    size = round(max(lo, min(hi, size)))
-    dsize = round(min(size, max(min_px, S * 0.008 * size_mult, min(size * 0.7, _fit(date, 0, target)))))
-    out = []
-    for txt, sz in [(x, size) for x in parts] + [(date, dsize)]:
-        f = _font(sz)
-        out.append((txt, f, int(f.getlength(txt))))
-    return out
+def label_rows(place, time_art, pr, font_path):
+    pf = ImageFont.truetype(font_path, pr["fp"])
+    lf = ImageFont.truetype(font_path, pr["fl"])
+    d = _parse(time_art)
+    date = config.get("locale.date_format").format(day=d.day, month=config.get("locale.months_full")[d.month - 1], year=d.year)
+    rows = [(x, pf, 255) for x in overlay.wrap_balanced(place, pf, pr["label_w"], 2)] if place else []
+    rows.append((date, lf, 205 if place else 235))
+    return rows
 
 
 FORMATS = ("tv", "celu", "chat", "reel")
 POSITIONS = ("top-right", "top-left", "bottom-right", "bottom-left")
-REV = "m3"
+REV = "m4"
 LEGACY_KEYS = ("enabled", "size", "opacity", "position", "label_scale", "radius_km", "urban_km", "break_on_act", "presets")
 
 
@@ -346,27 +330,29 @@ def cfg_with(*layers):
     return out
 
 
-def params(cfg, fmt, frame):
+def params(cfg, fmt, frame, typo=None):
     W, H = frame
+    typo = typo or overlay.params(overlay.cfg_with({}), fmt, frame)
     fd = cfg["format_defaults"]
     p = {**fd.get(fmt, fd["tv"]), **cfg["presets"].get(fmt, {})}
     S = min(W, H)
     D = round(S * (cfg["size"] or p["diameter"]))
+    mult = cfg["label_scale"] * p["label_size"]
     return dict(
         D=D,
         S=S,
-        size_mult=cfg["label_scale"] * p["label_size"],
-        fit_mult=cfg["label_scale"] * p["label_fit"],
-        min_px=p["label_min_px"],
-        mx=round(W * p["margin_x"]),
-        my=round(H * p["margin_y"]),
+        fp=max(1, round(typo["fp"] * mult)),
+        fl=max(1, round(typo["fl"] * mult)),
+        label_w=W * p["label_max_w"],
+        mx=typo["mx"] if p.get("margin_x") is None else round(W * p["margin_x"]),
+        my=typo["my"] if p.get("margin_y") is None else round(H * p["margin_y"]),
     )
 
 
-def render_overlay(time_art, lat, lon, place, frame=(1920, 1080), theme="dark", route_path=None, labels=None, out=None, cfg=None, fmt="tv"):
+def render_overlay(time_art, lat, lon, place, frame=(1920, 1080), theme="dark", route_path=None, labels=None, out=None, cfg=None, fmt="tv", typo=None, font=None):
     cfg = cfg_with(cfg or {})
     W, H = frame
-    pr = params(cfg, fmt, frame)
+    pr = params(cfg, fmt, frame, typo)
     geo = cfg["geometry"]
     SS = geo["supersample"]
     D, u = pr["D"], unit(pr["D"], geo)
@@ -385,27 +371,9 @@ def render_overlay(time_art, lat, lon, place, frame=(1920, 1080), theme="dark", 
     cv = cv.resize((cv.width // SS, cv.height // SS), Image.LANCZOS)
     cv.putalpha(cv.getchannel("A").point(lambda v: int(v * cfg["opacity"])))
 
-    lines = _label_lines(place, time_art, D, pr["S"], pr["size_mult"], pr["fit_mult"], pr["min_px"])
-    pad = max(4, round(12 * max(u, 0.5)))
-    gap = max(2, round(4 * max(u, 0.5)))
-    lw = max(D, max(w for _, _, w in lines)) + 2 * pad
-    lh = sum(f.size + gap for _, f, _ in lines) + 2 * pad
-    lab = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
-    sh = Image.new("L", (lw, lh), 0)
-    stroke = Image.new("L", (lw, lh), 0)
-    fg = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
-    drop = max(1, round(2 * max(u, 0.5)))
-    y = pad
-    for i, (txt, f, w) in enumerate(lines):
-        x = (lw - w) / 2
-        ImageDraw.Draw(sh).text((x, y + drop), txt, font=f, fill=255)
-        ImageDraw.Draw(stroke).text((x, y), txt, font=f, fill=255, stroke_width=1, stroke_fill=255)
-        ImageDraw.Draw(fg).text((x, y), txt, font=f, fill=(255, 255, 255, 255 if i < len(lines) - 1 else 215))
-        y += f.size + gap
-    sh = sh.filter(ImageFilter.GaussianBlur(max(1, lines[0][1].size // 8)))
-    lab.paste((0, 0, 0, 255), (0, 0), sh.point(lambda v: min(150, int(v))))
-    lab.paste((0, 0, 0, 255), (0, 0), stroke.point(lambda v: int(v * 0.55)))
-    lab.alpha_composite(fg)
+    lab = overlay.block_image(label_rows(place, time_art, pr, font or config.font("main")), pr["fp"], pr["fl"], align="center", min_w=D)
+    pad = overlay.spacing(pr["fp"], pr["fl"])[0]
+    lw, lh = lab.size
 
     mx, my = pr["mx"], pr["my"]
     position = cfg["position"]
@@ -422,12 +390,12 @@ def render_overlay(time_art, lat, lon, place, frame=(1920, 1080), theme="dark", 
     return ov
 
 
-def render_minimap_png(time_art, lat, lon, place, frame, cfg, route_path, labels, out, fmt="tv"):
+def render_minimap_png(time_art, lat, lon, place, frame, cfg, route_path, labels, out, fmt="tv", typo=None, font=None):
     out = pathlib.Path(out)
     meta = out.with_suffix(".json")
     if out.exists() and meta.exists():
         return tuple(json.loads(meta.read_text()))
-    ov = render_overlay(time_art, lat, lon, place, tuple(frame), cfg_with(cfg or {})["theme"], route_path, labels, None, cfg, fmt)
+    ov = render_overlay(time_art, lat, lon, place, tuple(frame), cfg_with(cfg or {})["theme"], route_path, labels, None, cfg, fmt, typo, font)
     x0, y0, x1, y1 = ov.getchannel("A").getbbox()
     ov.crop((x0, y0, x1, y1)).save(out, compress_level=1)
     meta.write_text(json.dumps([x0, y0]))

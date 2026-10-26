@@ -5,10 +5,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import config
 
 FORMATS = ("tv", "celu", "chat", "reel")
-_CAP = config.base_section("caption")
-MIN_SHOT_S = _CAP["min_shot_s"]
-FADE_IN_AFTER = _CAP["fade_in_after"]
-FADE_S = _CAP["fade_s"]
+FADE_S = config.base_section("caption")["fade_s"]
 MM_FADE_S = config.base_section("minimap")["fade_s"]
 
 
@@ -44,39 +41,8 @@ def params(cfg, fmt, frame):
     )
 
 
-def caption_png(cap, W, H, style, out, cfg=None, fmt="tv"):
-    pr = params(cfg, fmt, (W, H))
-    fp, fl, maxw = pr["fp"], pr["fl"], pr["maxw"]
-    place_font = ImageFont.truetype(style["font"], fp)
-    line_font = ImageFont.truetype(style["font"], fl)
-    rows = []
-    if cap.get("place"):
-        rows += [(t, place_font, 255) for t in wrap(cap["place"], place_font, maxw)]
-    if cap.get("line"):
-        rows += [(t, line_font, 205) for t in wrap(cap["line"], line_font, maxw)]
-    pad = max(8, fp // 2)
-    gap = max(2, fl // 5)
-    lw = int(max(f.getlength(t) for t, f, _ in rows)) + 2 * pad
-    lh = sum(f.size + gap for _, f, _ in rows) + 2 * pad
-    sh = Image.new("L", (lw, lh), 0)
-    st = Image.new("L", (lw, lh), 0)
-    fg = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
-    y = pad
-    for t, f, a in rows:
-        ImageDraw.Draw(sh).text((pad, y + 2), t, font=f, fill=255)
-        ImageDraw.Draw(st).text((pad, y), t, font=f, fill=255, stroke_width=1, stroke_fill=255)
-        ImageDraw.Draw(fg).text((pad, y), t, font=f, fill=(255, 255, 255, a))
-        y += f.size + gap
-    sh = sh.filter(ImageFilter.GaussianBlur(max(2, fp // 8)))
-    im = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
-    im.paste((0, 0, 0, 255), (0, 0), sh.point(lambda v: min(150, int(v))))
-    im.paste((0, 0, 0, 255), (0, 0), st.point(lambda v: int(v * 0.55)))
-    im.alpha_composite(fg)
-    mx, my = pr["mx"], pr["my"]
-    x = mx - pad
-    yy = H - my - lh + pad
-    im.save(out, compress_level=1)
-    return (x, yy)
+def spacing(fp, fl):
+    return max(8, fp // 2), max(2, fl // 5)
 
 
 def wrap(text, font, maxw):
@@ -91,15 +57,69 @@ def wrap(text, font, maxw):
     return lines + [cur] if cur else lines
 
 
-def caption_window(s, nxt_xn, fps, title_end=None):
-    if s.n / fps < config.get("caption.min_shot_s", MIN_SHOT_S):
-        return None
-    fade = fade_s()
-    vis_a = s.xn / fps
-    vis_b = (s.n - nxt_xn) / fps
-    a = vis_a + config.get("caption.fade_in_after", FADE_IN_AFTER)
-    if title_end is not None:
-        a = max(a, title_end + 0.1)
-    if vis_b - a < 1.5 * fade + 0.5:
-        return None
-    return {"in": round(a, 3), "out": round(vis_b - fade, 3)}
+def wrap_balanced(text, font, maxw, max_lines=2):
+    lines = wrap(text, font, maxw)
+    if len(lines) <= max_lines:
+        return lines
+    words = text.split()
+    cut = min(range(1, len(words)), key=lambda i: max(font.getlength(" ".join(words[:i])), font.getlength(" ".join(words[i:]))))
+    return [" ".join(words[:cut]), " ".join(words[cut:])]
+
+
+def block_image(rows, fp, fl, align="left", min_w=0):
+    pad, gap = spacing(fp, fl)
+    lw = max(int(max(f.getlength(t) for t, f, _ in rows)) + 2 * pad, min_w + 2 * pad if min_w else 0)
+    lh = sum(f.size + gap for _, f, _ in rows) + 2 * pad
+    sh = Image.new("L", (lw, lh), 0)
+    st = Image.new("L", (lw, lh), 0)
+    fg = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
+    drop = max(2, fp // 25)
+    y = pad
+    for t, f, a in rows:
+        x = pad if align == "left" else (lw - f.getlength(t)) / 2
+        ImageDraw.Draw(sh).text((x, y + drop), t, font=f, fill=255)
+        ImageDraw.Draw(st).text((x, y), t, font=f, fill=255, stroke_width=1, stroke_fill=255)
+        ImageDraw.Draw(fg).text((x, y), t, font=f, fill=(255, 255, 255, a))
+        y += f.size + gap
+    sh = sh.filter(ImageFilter.GaussianBlur(max(2, fp // 8)))
+    im = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
+    im.paste((0, 0, 0, 255), (0, 0), sh.point(lambda v: min(150, int(v))))
+    im.paste((0, 0, 0, 255), (0, 0), st.point(lambda v: int(v * 0.55)))
+    im.alpha_composite(fg)
+    return im
+
+
+def caption_layout(place, lines, W, H, font_path, cfg=None, fmt="tv"):
+    pr = params(cfg, fmt, (W, H))
+    fp, fl = pr["fp"], pr["fl"]
+    place_font = ImageFont.truetype(font_path, fp)
+    line_font = ImageFont.truetype(font_path, fl)
+    pad, gap = spacing(fp, fl)
+    place_rows = wrap_balanced(place, place_font, pr["maxw"], 2) if place else []
+    desc_rows = {ln: wrap(ln, line_font, pr["maxw"]) for ln in lines}
+    slot_h = max((len(r) for r in desc_rows.values()), default=0) * (fl + gap)
+    bottom = H - pr["my"]
+    return {
+        "pr": pr, "pad": pad, "gap": gap, "place_font": place_font, "line_font": line_font,
+        "place_rows": place_rows, "desc_rows": desc_rows,
+        "place_top": bottom - slot_h - len(place_rows) * (fp + gap), "desc_top": bottom - slot_h,
+        "x": pr["mx"] - pad,
+    }
+
+
+def place_xy(lay):
+    return lay["x"], lay["place_top"] - lay["pad"]
+
+
+def desc_xy(lay):
+    return lay["x"], lay["desc_top"] - lay["pad"]
+
+
+def place_png(lay, out):
+    rows = [(t, lay["place_font"], 255) for t in lay["place_rows"]]
+    block_image(rows, lay["pr"]["fp"], lay["pr"]["fl"]).save(out, compress_level=1)
+
+
+def desc_png(lay, line, out):
+    rows = [(t, lay["line_font"], 205) for t in lay["desc_rows"][line]]
+    block_image(rows, lay["pr"]["fp"], lay["pr"]["fl"]).save(out, compress_level=1)

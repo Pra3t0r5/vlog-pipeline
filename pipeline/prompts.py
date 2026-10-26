@@ -3,6 +3,7 @@ import re
 
 import config
 import costmode
+import pacing
 import prefilter
 
 MARKER = "=== PROMPT ==="
@@ -51,7 +52,7 @@ def values(proj, cfg):
     if prof["music"] == "user_or_list":
         music += f" ({config.repo_path(config.get('music.default_list', 'config/music_default.json'))})"
     scope = ("solo `place`; `line` va siempre en null y no se investiga nada" if not prof["research_subagents"]
-             else "`place` y, cuando lo puedas verificar en una fuente abierta, `line`; hasta 2 búsquedas por lugar distinto")
+             else "`place` y, cuando lo puedas verificar en la web, `line` con un dato interesante y su fuente; hasta 2 búsquedas por lugar distinto")
     return {
         "captions_scope": scope, "project": proj, "title": cfg.get("title") or cfg.get("name"), "from": lo or "(sin fecha)", "to": hi or "(sin fecha)",
         "target_min": target, "floor_min": dur.get("floor_min", round(target * 0.7, 1)), "ceil_min": dur.get("ceil_min", round(target * 1.4, 1)),
@@ -65,6 +66,7 @@ def values(proj, cfg):
         "chronology": proj / "notes" / "chronology.json", "captions": proj / "captions.json", "credits": proj / "music" / "credits.json",
         "guion_reel": proj / (reel or "guion-reel.json"), "max_s": config.get("presets.reel.max_s", REEL_MAX_S, full),
         "notes_files": notes_listing(proj), "out_file": proj / "notes" / "chronology.json",
+        **pacing.prompt_values(cfg),
     }
 
 

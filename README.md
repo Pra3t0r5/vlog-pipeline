@@ -13,7 +13,7 @@ No es un editor gráfico ni un servicio: es un conjunto de scripts de Python y f
 - **Descarte sin IA.** Un prefiltro quita lo borroso, las ráfagas, los duplicados exactos, las capturas de pantalla y lo que cae fuera de las fechas del viaje, y explica cada descarte.
 - **Triage en dos pasadas** sobre hojas de contacto, con salidas JSON validadas por el CLI (el CLI no cree el informe de un subagente: lo revalida).
 - **Edición por lista de cortes.** Un editor (humano o modelo) escribe una EDL; `vlog edl-check` la valida contra el brief, el triage y la nitidez; `edl2guion.py` la convierte en el guion que se renderiza.
-- **Render con caché por contenido.** Fundidos, zoom en fotos sin saltos de píxel, fondo desenfocado para medios que no son 16:9, tarjetas de título y créditos, minimapa de recorrido, captions de lugar, color y nitidez automáticos, música por acto con ducking y ajuste opcional de los cortes al pulso.
+- **Render con caché por contenido.** Fundidos, zoom en fotos sin saltos de píxel, fondo desenfocado para medios que no son 16:9, tarjetas de título y créditos, minimapa de recorrido, captions en hilo (el lugar fijo en pantalla y la descripción con fundido cruzado, sin repetir lo que ya dice un título o el minimapa), texto de tamaño fijo por salida, ritmo pausado para espectadores mayores (`pacing: relaxed`), color y nitidez automáticos, música por acto con ducking y ajuste opcional de los cortes al pulso.
 - **Varias salidas nativas** del mismo guion: `tv` (4K), `celu` (1080p), `chat` (hasta 28 MB) y `reel` (vertical, hasta 90 s, con su propio guion).
 - **Reanudable.** `vlog status` calcula dónde estás mirando los archivos, estima lo que falta y escribe `STATUS.md` para retomar desde otra sesión.
 

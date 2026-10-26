@@ -596,6 +596,11 @@ def cmd_sharpness(a):
     run([PY, PIPE / "sharpness.py", proj])
 
 
+def cmd_overlay_check(a):
+    import overlaycheck
+    overlaycheck.main(["--out", a.out] if a.out else [])
+
+
 def cmd_prompt(a):
     proj = find_project(a.project)
     cfg = load_checked(proj)
@@ -864,6 +869,9 @@ def parser():
     ec = sub.add_parser("edl-check", help="valida la EDL contra el brief y el triage")
     ec.add_argument("--edl")
     ec.set_defaults(f=cmd_edl_check)
+    oc = sub.add_parser("overlay-check", help="stills sintéticos de un shot con minimapa y caption en cada preset, para revisar tamaños")
+    oc.add_argument("--out")
+    oc.set_defaults(f=cmd_overlay_check)
     pr = sub.add_parser("prompt", help="imprime una plantilla de prompt rellena con los datos del proyecto")
     pr.add_argument("name", choices=prompts.NAMES)
     pr.set_defaults(f=cmd_prompt)

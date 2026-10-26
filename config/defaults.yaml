@@ -92,7 +92,8 @@ minimap:
   size: null                    # fracción del lado corto; si se define pisa presets.*.diameter
   opacity: 0.6
   position: top-right           # top-right | top-left | bottom-right | bottom-left
-  label_scale: 0.8
+  label_scale: 1.0              # multiplica el tamaño de la etiqueta respecto de la escala tipográfica compartida con los captions
+  suppress_redundant_place: true  # si un título o una tarjeta del acto ya nombra el lugar, la etiqueta muestra solo la fecha
   radius_km: 120.0              # radio del mapa regional
   urban_km: 1.2                 # radio del mapa de calles en un pueblo con datos OSM
   break_on_act: true
@@ -115,22 +116,26 @@ minimap:
   themes:
     dark: {base: [18, 24, 32, 205], road: [120, 132, 146, 150], prov: [150, 160, 172, 170], pend: [255, 255, 255, 70]}
     light: {base: [232, 228, 218, 190], road: [150, 142, 128, 170], prov: [120, 110, 96, 190], pend: [60, 50, 40, 90]}
-  format_defaults:              # tamaños por formato de salida; project.yaml los pisa en minimap.presets.<formato>
-    tv: {diameter: 0.10, label_size: 1.0, label_fit: 1.0, label_min_px: 20, margin_x: 0.025, margin_y: 0.025}
-    celu: {diameter: 0.10, label_size: 1.0, label_fit: 1.0, label_min_px: 12, margin_x: 0.03, margin_y: 0.035}
-    chat: {diameter: 0.14, label_size: 1.0, label_fit: 1.0, label_min_px: 11, margin_x: 0.03, margin_y: 0.05}
-    reel: {diameter: 0.16, label_size: 2.0, label_fit: 1.5, label_min_px: 22, margin_x: 0.05, margin_y: 0.13}
+  format_defaults:              # por formato de salida; project.yaml los pisa en minimap.presets.<formato>. Los márgenes en null heredan los de caption.format_defaults
+    tv: {diameter: 0.14, label_size: 1.0, label_max_w: 0.20, margin_x: null, margin_y: null}
+    celu: {diameter: 0.14, label_size: 1.0, label_max_w: 0.22, margin_x: null, margin_y: null}
+    chat: {diameter: 0.18, label_size: 1.0, label_max_w: 0.30, margin_x: null, margin_y: null}
+    reel: {diameter: 0.19, label_size: 1.0, label_max_w: 0.55, margin_x: null, margin_y: 0.13}
   presets: {}
 
 caption:
-  min_shot_s: 2.5
+  min_shot_s: 2.5               # una racha de captions más corta que esto (en segundos) no lleva texto
   fade_in_after: 0.5
   fade_s: 0.5
-  format_defaults:
-    tv: {place: 0.018, line: 0.015, min_place_px: 30, min_line_px: 24, max_w: 0.46, margin_x: 0.04, margin_y: 0.04}
-    celu: {place: 0.022, line: 0.018, min_place_px: 20, min_line_px: 16, max_w: 0.46, margin_x: 0.04, margin_y: 0.05}
-    chat: {place: 0.036, line: 0.030, min_place_px: 12, min_line_px: 10, max_w: 0.55, margin_x: 0.04, margin_y: 0.06}
-    reel: {place: 0.042, line: 0.034, min_place_px: 40, min_line_px: 32, max_w: 0.88, margin_x: 0.06, margin_y: 0.20}
+  suppress_redundant_place: true  # no repite el lugar si ya lo nombra un título, una tarjeta o la etiqueta del minimapa
+  min_line_s: 1.5               # permanencia mínima de una descripción: min_line_s + line_s_per_word * palabras
+  line_s_per_word: 0.3
+  on_short_shot: persist        # persist | skip: qué hace una descripción cuyo shot es demasiado corto
+  format_defaults:              # escala tipográfica compartida con la etiqueta del minimapa; tamaños fijos por formato (fracción del lado corto)
+    tv: {place: 0.0252, line: 0.021, min_place_px: 16, min_line_px: 13, max_w: 0.55, margin_x: 0.04, margin_y: 0.04}
+    celu: {place: 0.0275, line: 0.0225, min_place_px: 20, min_line_px: 16, max_w: 0.55, margin_x: 0.04, margin_y: 0.05}
+    chat: {place: 0.045, line: 0.0375, min_place_px: 13, min_line_px: 11, max_w: 0.6, margin_x: 0.04, margin_y: 0.06}
+    reel: {place: 0.0525, line: 0.0425, min_place_px: 46, min_line_px: 37, max_w: 0.88, margin_x: 0.06, margin_y: 0.20}
   presets: {}
 
 grade:
@@ -194,6 +199,17 @@ edit:                           # edición: límites de la EDL y reglas de `vlog
   min_caption_s: 2.5
   edge_s: 0.3
   max_drone_run: 3
+
+pacing:                         # ritmo de la edición; `pacing: relaxed` en project.yaml equivale a pacing.mode
+  mode: relaxed                 # relaxed | standard
+  multiplier: {relaxed: 1.3, standard: 1.0}   # factor sobre los objetivos de duración por plano
+  min_shot_s: null              # si se define, es el plano más corto que tolera edl-check (pisa el mínimo de cada tipo)
+  max_cuts_per_min: 18          # cortes por minuto en standard; el tope efectivo es este valor dividido por el multiplicador
+  targets:                      # [mínimo, máximo] en segundos en standard; el modo los multiplica
+    drone: [4.0, 6.0]
+    photo: [2.5, 4.0]
+    hero: [4.0, 4.5]
+    phone: [3.0, 8.0]
 
 credits:
   fallback_title: Créditos

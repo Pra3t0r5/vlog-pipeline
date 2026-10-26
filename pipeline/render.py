@@ -17,9 +17,10 @@ import mixaudio
 import overlay
 import presets
 import stills
+import textplan
 
-REV = "r5"
-PART_REV = "p2"
+REV = "r6"
+PART_REV = "p3"
 OVERLAY_YUV = "scale=out_color_matrix=bt709:out_range=tv:flags=bicubic,format=yuva420p"
 STYLE_KEYS = ("font", "bg_sigma", "bg_dim", "card_dim", "card_color", "aspect_tol", "zoom_amt", "focus_zoom", "pan_zoom")
 
@@ -76,6 +77,13 @@ def aux_json(G, rel):
     return G.__dict__[key]
 
 
+def text_ctx(G):
+    if "textctx" not in G.__dict__:
+        entries = textplan.entries_from_guion(G.shots)
+        G.__dict__["textctx"] = {"entries": entries, "named": textplan.named_in_effect(entries)}
+    return G.__dict__["textctx"]
+
+
 def minimap_plan(G, s, report):
     if s.minimap is None:
         return None
@@ -104,8 +112,10 @@ def minimap_plan(G, s, report):
         return None
     tstr = t.isoformat()
     src = filled if filled.exists() else route
-    key = h([minimap.REV, G.W, G.H, G.fmt, minimap.cache_sig(cfg), rec["lat"], rec["lon"], tstr, place, ffx.sig(src)])
-    return {"key": key, "t": tstr, "place": place, "cfg": cfg}
+    show = not (cfg["suppress_redundant_place"] and textplan.names_place(text_ctx(G)["named"][s.idx], place))
+    typo = overlay.params(G.caption_cfg, G.fmt, (G.W, G.H))
+    key = h([minimap.REV, G.W, G.H, G.fmt, minimap.cache_sig(cfg), rec["lat"], rec["lon"], tstr, place, show, typo, G.style["font"], ffx.sig(src)])
+    return {"key": key, "t": tstr, "place": place, "show_place": show, "cfg": cfg, "typo": typo}
 
 
 def minimap_runs(G, plans):
@@ -125,9 +135,13 @@ def minimap_runs(G, plans):
     return runs
 
 
-def minimap_intervals(G, report):
+def minimap_plans(G, report):
+    return [None if s.kind in ("card", "map") else minimap_plan(G, s, report) for s in G.shots]
+
+
+def minimap_intervals(G, report, plans=None):
     shots, fps = G.shots, G.fps
-    plans = [None if s.kind in ("card", "map") else minimap_plan(G, s, report) for s in shots]
+    plans = plans if plans is not None else minimap_plans(G, report)
     fade_n = max(1, round(overlay.mm_fade_s() * float(fps)))
     tail = G.total_frames - round(G.style["fade_out"] * float(fps))
     out = []
@@ -155,7 +169,7 @@ def minimap_pngs(G, intervals, report):
         s, mm = G.shots[iv["idx"]], iv["mm"]
         png = G.cache / f"minimap-{mm['key']}.png"
         with report.stage("minimapas"):
-            iv["x"], iv["y"] = minimap.render_minimap_png(mm["t"], s.rec["lat"], s.rec["lon"], mm["place"], (G.W, G.H), mm["cfg"], G.project / "route" / "route.json", labels, png, G.fmt)
+            iv["x"], iv["y"] = minimap.render_minimap_png(mm["t"], s.rec["lat"], s.rec["lon"], mm["place"] if mm["show_place"] else None, (G.W, G.H), mm["cfg"], G.project / "route" / "route.json", labels, png, G.fmt, mm["typo"], G.style["font"])
         iv["png"] = png
     return intervals
 
@@ -166,22 +180,65 @@ def title_end(s, dur):
     return s.title.get("dur", min(3.5, dur)) + 0.5
 
 
-def overlay_plan(G, s, report):
-    if s.kind in ("card", "map"):
-        return {}
-    plan = {}
-    if s.caption:
-        fps = float(G.fps)
-        nxt = G.shots[s.idx + 1].xn if s.idx + 1 < len(G.shots) else 0
-        w = overlay.caption_window(s, nxt, fps, title_end(s, s.n / fps))
-        if w:
-            plan["cap"] = {**w, "cap": s.caption, "d": overlay.fade_s(), "key": h([overlay.params(G.caption_cfg, G.fmt, (G.W, G.H)), G.W, G.H, G.style["font"], s.caption])}
-        else:
-            report.warn(f"shot {s.idx} ({s.label}): caption omitido (el shot es corto o el título ocupa el lugar)")
-    return plan
+def caption_intervals(G, plans, report):
+    ctx = text_ctx(G)
+    fps = float(G.fps)
+    d = overlay.fade_s()
+    df = max(1, round(d * fps))
+    suppress = config.get("caption.suppress_redundant_place", True)
+    out = []
+    for run in textplan.caption_runs(ctx["entries"]):
+        shots = [G.shots[e["idx"]] for e in run]
+        spans = []
+        for s in shots:
+            nxt = G.shots[s.idx + 1].xn if s.idx + 1 < len(G.shots) else 0
+            spans.append({
+                "caption": s.caption,
+                "vis_a": (s.start + s.xn) / fps,
+                "vis_b": (s.start + s.n - nxt) / fps,
+                "anchor": (s.start + s.xn / 2) / fps,
+                "title_end": s.start / fps + title_end(s, s.n / fps) if s.title else None,
+            })
+        plan = textplan.plan_run(spans, d)
+        first = shots[0]
+        if plan is None:
+            report.warn(f"shot {first.idx} ({first.label}): caption omitido (el tramo es corto o el título ocupa el lugar)")
+            continue
+        for text in plan["skipped"]:
+            report.warn(f"shot {first.idx} ({first.label}): descripción omitida por no alcanzar su permanencia mínima: {text[:40]}")
+        place = first.caption.get("place")
+        mm = plans[first.idx]
+        if place and suppress and (
+            textplan.names_place(ctx["named"][first.idx], place)
+            or (mm is not None and mm["show_place"] and textplan.norm(mm["place"]) == textplan.norm(place))
+        ):
+            place = None
+        lines = [sg["text"] for sg in plan["segments"]]
+        if not place and not lines:
+            continue
+        lay = overlay.caption_layout(place, lines, G.W, G.H, G.style["font"], G.caption_cfg, G.fmt)
+        base = [G.W, G.H, G.style["font"], lay["pr"]]
+        end = G.total_frames
+
+        def add(kind, text, t0, t1, xy, render_png):
+            f0, f1 = round(t0 * fps), min(round(t1 * fps), end)
+            if f1 - f0 < 2 * df:
+                return
+            key = h(base + [kind, text, xy])
+            png = G.cache / f"caption-{key}.png"
+            if not png.exists():
+                with report.stage("captions"):
+                    render_png(png)
+            out.append({"idx": first.idx, "kind": kind, "text": text, "f0": f0, "f1": f1, "fin": df, "fout": df, "x": xy[0], "y": xy[1], "png": png, "key": key})
+
+        if place:
+            add("place", place, plan["a"], plan["b"], overlay.place_xy(lay), lambda png: overlay.place_png(lay, png))
+        for sg in plan["segments"]:
+            add("desc", sg["text"], sg["start"], sg["end"], overlay.desc_xy(lay), lambda png, sg=sg: overlay.desc_png(lay, sg["text"], png))
+    return out
 
 
-def spec_of(G, s, src, report, plan=None):
+def spec_of(G, s, src, report):
     sp = {"rev": REV, "W": G.W, "H": G.H, "fps": G.fps_s, "kind": s.kind, "n": s.n, "codec": G.preset["codec"], "br": G.preset["seg_bitrate"], "style": {k: G.style[k] for k in STYLE_KEYS}, "title": s.title}
     if s.kind in ("video", "map"):
         sp.update(src=ffx.sig(src), t_in=s.t_in, speed=s.speed, fit=s.fit, dims=[s.w, s.h])
@@ -195,8 +252,6 @@ def spec_of(G, s, src, report, plan=None):
         sp.update(card=s.card, lines=card_lines(G, s.card))
     if s.gplan:
         sp["grade"] = grade.spec(s.gplan, s.kind)
-    if plan:
-        sp["ov"] = {k: {kk: vv for kk, vv in v.items() if kk not in ("cfg", "place", "t", "cap")} for k, v in plan.items()}
     return sp
 
 
@@ -224,7 +279,7 @@ def overlay_chain(G, base_fc, items, dur, k0=1):
     return inputs, fc, "[o]"
 
 
-def overlay_items(G, s, plan, key, dur, report):
+def overlay_items(G, s, key, dur, report):
     items = []
     if s.title and s.kind != "card":
         t = s.title
@@ -232,12 +287,6 @@ def overlay_items(G, s, plan, key, dur, report):
         stills.title_png(t, G.W, G.H, G.style, png)
         td = t.get("dur", min(3.5, dur))
         items.append({"png": png, "x": 0, "y": 0, "fades": [("in", 0.3, 0.5), ("out", td, 0.5)]})
-    cp = plan.get("cap")
-    if cp:
-        png = G.cache / f"caption-{cp['key']}.png"
-        with report.stage("captions"):
-            x, y = overlay.caption_png(cp["cap"], G.W, G.H, G.style, png, G.caption_cfg, G.fmt)
-        items.append({"png": png, "x": x, "y": y, "fades": [("in", cp["in"], cp["d"]), ("out", cp["out"], cp["d"])]})
     return items
 
 
@@ -271,8 +320,7 @@ def build_still(G, s, png, fc_tail, key):
 def segment(G, s, report):
     src = G.source_of(s, report) if s.kind in ("video", "photo") else s.src
     s.gplan = grade.plan(G, s, report)
-    plan = overlay_plan(G, s, report)
-    sp = spec_of(G, s, src, report, plan)
+    sp = spec_of(G, s, src, report)
     key = h(sp)
     out = G.cache / f"{s.label}-{key}.mp4"
     if out.exists():
@@ -302,7 +350,7 @@ def segment(G, s, report):
             png = G.cache / f"card-{key}.png"
             stills.card_png(s.card, W, H, G.style, bg_im, card_lines(G, s.card), png)
         inputs, fc = build_still(G, s, png, tail, key)
-    items = overlay_items(G, s, plan, key, s.n / G.fps, report)
+    items = overlay_items(G, s, key, s.n / G.fps, report)
     t_inputs, fc, out_label = overlay_chain(G, fc, items, float(s.n / G.fps))
     inputs = inputs + t_inputs
     part = out.with_suffix(".part.mp4")
@@ -397,7 +445,8 @@ def assemble(G, segs, audio, report):
     spp = config.get("render.shots_per_part", {"default": 4}, cfg=G.cfg)
     k = int(G.raw.get("output", {}).get("shots_per_part", spp.get(G.mode, spp.get("default", 4))))
     plan = plan_parts(G, k)
-    intervals = minimap_pngs(G, minimap_intervals(G, report), report)
+    plans = minimap_plans(G, report)
+    intervals = minimap_pngs(G, minimap_intervals(G, report, plans), report) + caption_intervals(G, plans, report)
     files = []
     for a, b, members in plan:
         ovs = part_overlays(a, b, intervals)

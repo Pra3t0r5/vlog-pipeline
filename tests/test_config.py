@@ -104,7 +104,7 @@ class Layers(unittest.TestCase):
 
 FREE_FORM = {"presets", "minimap.themes", "minimap.format_defaults", "minimap.presets", "minimap.geometry", "caption.format_defaults", "caption.presets", "grade.profiles", "sheets.presets",
              "costmode.profiles", "workflow.stage_tokens", "osm.towns", "minimap.places.natural_earth", "ingest.exclude_name_patterns", "grade.soft_lap", "proxies.drone", "proxies.phone",
-             "musicmix.loudnorm", "render.shots_per_part"}
+             "musicmix.loudnorm", "render.shots_per_part", "pacing.multiplier", "pacing.targets"}
 
 
 def leaf_keys(d, pre=""):

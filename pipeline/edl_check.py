@@ -2,6 +2,8 @@ import json
 import pathlib
 
 import config
+import pacing
+import textplan
 
 _EDL = config.base_section("edit")
 TIE_Z = _EDL["tie_z"]
@@ -107,12 +109,67 @@ def check(edl, inp, cfg):
                 warns.append(f"edge {sid}: tramo pegado al borde del clip")
         elif not s.get("dur"):
             err("range", sid, "foto sin dur")
-        if s.get("caption") and dur_of(s) < min_caption_s:
-            err("caption-short", sid, f"caption en un plano de {dur_of(s):.1f}s")
         c = inp["captions"].get(sid, {})
         if s.get("caption") and c.get("confidence") == "low":
             warns.append(f"caption {sid}: el dato es de confianza baja")
+    entries = textplan.entries_from_edl(edl)
+    named = textplan.named_in_effect(entries)
+    runs = textplan.caption_runs(entries)
+    for run in runs:
+        span = sum(dur_of(e["ref"]) for e in run)
+        if span < min_caption_s:
+            err("caption-short", run[0]["ref"].get("id"), f"caption en un tramo de {span:.1f}s")
+    mm_on = full["minimap"]["enabled"]
+    for e in entries:
+        cap = e["caption"]
+        if e["kind"] not in REAL or not cap or not cap.get("place"):
+            continue
+        sid = e["ref"].get("id")
+        if textplan.names_place(named[e["idx"]], cap["place"]):
+            warns.append(f"caption-dup-title {sid}: el lugar «{cap['place']}» ya lo nombra el título o la tarjeta del acto; el render lo omite")
+        elif mm_on and e["ref"].get("minimap") is not False:
+            mm_place = (inp["captions"].get(sid) or {}).get("place") or (media.get(sid, {}).get("place") or "").split(",")[0]
+            if textplan.norm(mm_place) == textplan.norm(cap["place"]):
+                warns.append(f"caption-dup-minimap {sid}: el lugar «{cap['place']}» ya está en la etiqueta del minimapa; dejá solo la descripción (place null)")
+    fade = full["caption"]["fade_s"]
+    xf = edl.get("crossfade_s", full["edit"]["crossfade_s"])
+    first_of_act = {id(a["shots"][0]) for a in acts if a["shots"]}
+    start, prev_end, timing = 0.0, 0.0, {}
+    for i, e in enumerate(entries):
+        d_i = dur_of(e["ref"])
+        x_i = xf if (id(e["ref"]) in first_of_act and i > 0) else 0.0
+        start = prev_end - x_i if i else 0.0
+        prev_end = start + d_i
+        timing[e["idx"]] = (start, d_i, x_i)
+    for run in runs:
+        spans = []
+        for e in run:
+            st, d_i, x_i = timing[e["idx"]]
+            nxt = timing.get(e["idx"] + 1)
+            spans.append({
+                "caption": e["caption"], "vis_a": st + x_i, "vis_b": st + d_i - (nxt[2] if nxt else 0.0), "anchor": st + x_i / 2,
+                "title_end": st + min(3.5, d_i) + 0.5 if e["has_title"] else None,
+            })
+        rid = run[0]["ref"].get("id")
+        plan = textplan.plan_run(spans, fade, full)
+        if plan is None:
+            warns.append(f"caption-no-room {rid}: el tramo no deja lugar al caption (corto, o el título ocupa el rincón); el render lo omite")
+            continue
+        for text in plan["skipped"]:
+            warns.append(f"caption-min-time {rid}: «{text}» no alcanza {textplan.min_line_s(text, full):.1f}s en pantalla; el render la omite")
+    ps = pacing.settings(cfg)
+    for e in entries:
+        if e["kind"] not in REAL:
+            continue
+        s, sid = e["ref"], e["ref"].get("id")
+        keep = triage.get(rev.get(sid), {}).get("keep")
+        kind = pacing.kind_of(s, media.get(sid, {}), keep)
+        floor = pacing.min_for(ps, kind)
+        if dur_of(s) < floor - 1e-6:
+            warns.append(f"pacing-short {sid}: {dur_of(s):.1f}s por debajo de {floor:g}s ({kind}, ritmo {ps['mode']})")
     total = total_of(edl)
+    if total and len(flat) / (total / 60) > ps["max_cuts_per_min"]:
+        warns.append(f"pacing-cuts: {len(flat) / (total / 60):.1f} planos por minuto superan el tope de {ps['max_cuts_per_min']:g} (ritmo {ps['mode']})")
     dur = cfg.get("duration") or {}
     if dur.get("floor_min") and total < dur["floor_min"] * 60:
         errs.append(f"duration: {total:.0f}s por debajo del piso de {dur['floor_min']} min")

@@ -64,7 +64,7 @@ Campos comunes:
 |---|---|---|
 | `transition` | `"fade"` (defecto) / `"cut"` | Cómo entra este shot. `fade` es un xfade de `style.xfade` s (0,6); `cut` es corte seco. El primero ignora el campo. |
 | `xfade` | segundos | Pisa la duración del fundido de entrada de este shot. |
-| `title` | `{"text","sub","dur"}` | Lower-third (PNG Pillow, fondo oscuro, tipografía `fonts.main`). `dur` en segundos (defecto el menor entre 3,5 s y la duración del shot). |
+| `title` | `{"text","sub","dur"}` | Lower-third (PNG Pillow, fondo oscuro, tipografía `fonts.main`; un texto largo se parte en renglones, no se achica). `dur` en segundos (defecto el menor entre 3,5 s y la duración del shot). |
 | `snap` | bool | Si participa del beat snap. Defecto `true`, salvo en `card`. |
 | `grade`, `sharpen` | ver "Color y nitidez" | Solo fotos y videos. |
 
@@ -76,46 +76,50 @@ Campos comunes:
 
 ### Minimapa (`minimap`)
 
-Círculo de navegación arriba a la derecha con la ruta recorrida, el punto naranja centrado y debajo una etiqueta apilada (lugar + fecha, autoajustada). Sale solo del GPS y la hora del medio (`lat`, `lon`, `time_art` de `media.json`; en un video se suma `in`), del lugar de `captions.json`/`route/labels.json` y de `route/route_filled.json` (si existe; si no, `route.json`). En un pueblo con calles OSM en `vendor/osm/` (se bajan con `vlog osm`; radio `urban_km`) dibuja calles; fuera, mapa regional de `radius_km`. El mapa regional sale de Natural Earth (`vlog fetch-data`). `lat_min` descarta los puntos de la ruta al sur de esa latitud, `places.natural_earth` suma ciudades de referencia y `places.always` fija cuáles se rotulan siempre (ver [`CONFIG.md`](CONFIG.md)).
+Círculo de navegación arriba a la derecha con la ruta recorrida, el punto naranja centrado y debajo una etiqueta apilada (lugar + fecha, de tamaño fijo). Sale solo del GPS y la hora del medio (`lat`, `lon`, `time_art` de `media.json`; en un video se suma `in`), del lugar de `captions.json`/`route/labels.json` y de `route/route_filled.json` (si existe; si no, `route.json`). En un pueblo con calles OSM en `vendor/osm/` (se bajan con `vlog osm`; radio `urban_km`) dibuja calles; fuera, mapa regional de `radius_km`. El mapa regional sale de Natural Earth (`vlog fetch-data`). `lat_min` descarta los puntos de la ruta al sur de esa latitud, `places.natural_earth` suma ciudades de referencia y `places.always` fija cuáles se rotulan siempre (ver [`CONFIG.md`](CONFIG.md)).
 
 **Rachas.** Una racha es una secuencia de shots consecutivos con minimapa; la rompen una tarjeta, un mapa, un shot sin GPS o `"minimap": false`, y el cambio de `act` (`break_on_act`, `true` por defecto). Dentro de la racha el minimapa queda en pantalla de corrido: en cada corte cambia el punto y la etiqueta al instante, sin fundido, y en un fundido cruzado entre dos shots de la misma racha cambia en su punto medio. Entra con un fundido de 0,4 s cuando termina el fundido de entrada del primer shot de la racha y sale con otro de 0,4 s que termina donde empieza el fundido hacia la tarjeta, el mapa o el shot siguiente (o 1 s antes del final del video). Se superpone al ensamblar cada parte, no en los segmentos: los segmentos no dependen del minimapa y cambiarlo recodifica sólo las partes que toca.
 
-**Escala por formato.** El diámetro es una fracción del lado corto del cuadro, según el formato de salida (`tv`, `celu`, `chat`, `reel`; `preview` usa los de `tv`). La ruta, el punto, el anillo y la etiqueta escalan con él; la etiqueta tiene un mínimo absoluto en píxeles (`label_min_px`, 11 en chat) y nunca se sale del margen.
+**Escala por formato.** El diámetro es una fracción del lado corto del cuadro, según el formato de salida (`tv`, `celu`, `chat`, `reel`; `preview` usa los de `tv`). La ruta, el punto y el anillo escalan con él. La etiqueta usa la misma escala tipográfica fija que los captions (lugar a `caption.place`, fecha a `caption.line`) y los mismos márgenes: el tamaño del texto no cambia de un shot a otro. Un nombre largo se parte en 2 renglones en límites de palabra en lugar de achicarse. Si un título o una tarjeta del acto ya nombra el lugar (`suppress_redundant_place`), la etiqueta muestra solo la fecha.
 
 ```yaml
 minimap:
   enabled: true
   opacity: 0.6
   position: top-right
-  label_scale: 0.8
+  label_scale: 1.0
   radius_km: 120
   urban_km: 1.2
   break_on_act: true
   presets:
-    tv: {diameter: 0.10, label_min_px: 20, margin_x: 0.025, margin_y: 0.025}
-    celu: {diameter: 0.10, label_min_px: 12, margin_x: 0.03, margin_y: 0.035}
-    chat: {diameter: 0.14, label_min_px: 11, margin_x: 0.03, margin_y: 0.05}
-    reel: {diameter: 0.16, label_min_px: 22, label_size: 2.0, label_fit: 1.5, margin_x: 0.05, margin_y: 0.13}
+    tv: {diameter: 0.14, label_max_w: 0.20}
+    celu: {diameter: 0.14, label_max_w: 0.22}
+    chat: {diameter: 0.18, label_max_w: 0.30}
+    reel: {diameter: 0.19, label_max_w: 0.55, margin_y: 0.13}
 ```
 
-`enabled` es `false` por defecto; los valores de `presets` también tienen el mismo defecto en el código y `project.yaml` sólo pisa lo que cambia. `diameter`: fracción del lado corto; `label_size` y `label_fit` multiplican (junto con `label_scale`) el tamaño de la etiqueta y el ancho al que se ajusta; `margin_x`/`margin_y`: fracción del ancho y del alto. `size` (fracción del lado corto) pisa `diameter` en todos los formatos. Config en `project.yaml` o en el guion (gana). Por shot: `"minimap": false` lo apaga; `"minimap": {"opacity": 0.4, "place": "Mirador"}` pisa cualquier clave (y `place` fuerza la etiqueta). El PNG recortado se cachea por shot y formato (`minimap-<hash>.png`) y la clave de la parte incluye los intervalos y los PNG.
+`enabled` es `false` por defecto; los valores de `presets` también tienen el mismo defecto en el código y `project.yaml` sólo pisa lo que cambia. `diameter`: fracción del lado corto; `label_size` multiplica (junto con `label_scale`) la escala tipográfica compartida; `label_max_w`: ancho máximo de la etiqueta (fracción del ancho); `margin_x`/`margin_y` (fracción del ancho y del alto): por defecto los de los captions. `size` (fracción del lado corto) pisa `diameter` en todos los formatos. Config en `project.yaml` o en el guion (gana). Por shot: `"minimap": false` lo apaga; `"minimap": {"opacity": 0.4, "place": "Mirador"}` pisa cualquier clave (y `place` fuerza la etiqueta). El PNG recortado se cachea por shot y formato (`minimap-<hash>.png`) y la clave de la parte incluye los intervalos y los PNG.
 
 ### Caption por shot (`caption`)
 
-`{"id": "...", "dur": 5, "caption": {"place": "Iglesia del pueblo", "line": "Construida en el siglo XVII"}}`. Texto abajo a la izquierda, sin caja (tipografía `fonts.main` en blanco, sombra suave y trazo fino, igual que la etiqueta del minimapa). Entra con un fundido de 0,5 s que empieza 0,5 s después de que el shot se ve entero y sale con un fundido de 0,5 s que termina cuando empieza el fundido hacia el siguiente. No se pone en shots de menos de 2,5 s. Si el shot tiene `title` (que ocupa el mismo rincón), el caption espera a que el título termine (`dur` + 0,5 s); si no queda tiempo se omite y avisa. `line` puede ser `null`.
+`{"id": "...", "dur": 5, "caption": {"place": "Iglesia del pueblo", "line": "Construida en el siglo XVII"}}`. Texto abajo a la izquierda, sin caja (tipografía `fonts.main` en blanco, sombra suave y trazo fino, igual que la etiqueta del minimapa). `line` puede ser `null` y `place` también (si hay `line`).
 
-El tamaño también es por formato, como fracción del lado corto con un mínimo en píxeles, en `caption.presets` de `project.yaml`:
+**Rachas.** Los shots consecutivos con el mismo `caption.place` forman una racha (la cortan una tarjeta, un mapa, un shot sin caption, un cambio de `act` o un shot con `title`). El lugar queda en pantalla toda la racha: entra con un fundido de 0,5 s que empieza 0,5 s después de que el primer shot se ve entero (o cuando termina su título) y sale con otro que termina donde empieza el fundido hacia lo que sigue. No hay fundido en cada corte: solo la descripción cambia, con un fundido cruzado centrado en el corte. Se superpone al ensamblar cada parte, como el minimapa: los segmentos no llevan captions y editarlos recodifica solo las partes que toca.
+
+**Permanencia mínima.** Cada descripción necesita `caption.min_line_s` + `caption.line_s_per_word` por palabra en pantalla (1,5 s + 0,3 s por palabra). Si su shot es demasiado corto, la descripción sigue en el shot siguiente de la racha (`caption.on_short_shot: persist`; con `skip` se omite) y la del shot siguiente entra cuando la anterior cumplió su tiempo; los shots cortos de una racha muestran solo el lugar. Una descripción que no llega a cumplir su tiempo antes de terminar la racha se omite y avisa. Una racha de menos de `caption.min_shot_s` (2,5 s) no lleva caption. Si el título del shot (o la tarjeta del acto) ya nombra el lugar, o la etiqueta del minimapa del primer shot de la racha lo repite, el renglón del lugar se omite y queda la descripción (`caption.suppress_redundant_place`); `vlog edl-check` avisa de estas repeticiones.
+
+El tamaño es fijo por formato (no se ajusta al largo del texto), como fracción del lado corto con un mínimo en píxeles, y es el mismo que usa la etiqueta del minimapa. En `caption.presets` de `project.yaml`:
 
 ```yaml
 caption:
   presets:
-    tv: {place: 0.018, line: 0.015, min_place_px: 30, min_line_px: 24}
-    celu: {place: 0.022, line: 0.018, min_place_px: 20, min_line_px: 16}
-    chat: {place: 0.036, line: 0.030, min_place_px: 12, min_line_px: 10, max_w: 0.55}
-    reel: {place: 0.042, line: 0.034, min_place_px: 40, min_line_px: 32, max_w: 0.88, margin_y: 0.20}
+    tv: {place: 0.0252, line: 0.021, min_place_px: 16, min_line_px: 13}
+    celu: {place: 0.0275, line: 0.0225, min_place_px: 20, min_line_px: 16}
+    chat: {place: 0.045, line: 0.0375, min_place_px: 13, min_line_px: 11, max_w: 0.6}
+    reel: {place: 0.0525, line: 0.0425, min_place_px: 46, min_line_px: 37, max_w: 0.88, margin_y: 0.20}
 ```
 
-`max_w` es el ancho máximo del texto (fracción del ancho), `margin_x`/`margin_y` los márgenes. En el reel el caption sube a 20 % del alto.
+`max_w` es el ancho máximo del texto (fracción del ancho), `margin_x`/`margin_y` los márgenes. Un lugar largo se parte en 2 renglones; la descripción, en los que haga falta. En el reel el caption sube a 20 % del alto. `vlog overlay-check` genera stills de un shot sintético con minimapa y caption en cada preset para revisar los tamaños.
 
 ### Reencuadre (`focus_x`)
 
@@ -128,7 +132,7 @@ Solo importa cuando el medio se recorta (`fit: "fill"`): `focus_x` (0 a 1, defec
           "music_credits": true,
           "bg": {"id": "drone.DJI_0001", "at": 20}}, "dur": 4}
 ```
-`bg` puede ser `{"id": ..., "at": segundos}` (cuadro de un video o foto, desenfocado y oscurecido) o `{"color": "#1b1511"}`; sin `bg`, color sólido `style.card_color`. `lines` son renglones chicos; con `music_credits: true` se agregan los créditos de `music/credits.json` (ver abajo). Los textos largos se achican para entrar en el 86 % del ancho. Las tarjetas no participan del beat snap salvo `"snap": true`.
+`bg` puede ser `{"id": ..., "at": segundos}` (cuadro de un video o foto, desenfocado y oscurecido) o `{"color": "#1b1511"}`; sin `bg`, color sólido `style.card_color`. `lines` son renglones chicos; con `music_credits: true` se agregan los créditos de `music/credits.json` (ver abajo). Los textos largos se parten en renglones en límites de palabra para entrar en el 86 % del ancho (solo una palabra que no entra sola se achica). Las tarjetas no participan del beat snap salvo `"snap": true`.
 
 ### Mapa: `{"map": "ruta/al/clip.mp4", "in": 0, "dur": 6}`
 Clip prerenderizado (por ejemplo con `routemap.py`). Ruta absoluta o relativa al guion/proyecto. Se convierte a la resolución y fps de salida.

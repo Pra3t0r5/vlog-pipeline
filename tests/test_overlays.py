@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "pipeline"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -54,7 +55,7 @@ class ParseTest(unittest.TestCase):
     def test_minimap_defaults_are_the_approved_design(self):
         G = make_project([{"id": "drone.A", "dur": 5}])
         self.assertFalse(G.minimap["enabled"])
-        self.assertEqual((G.minimap["size"], G.minimap["opacity"], G.minimap["label_scale"], G.minimap["radius_km"], G.minimap["urban_km"], G.minimap["position"]), (None, 0.6, 0.8, 120.0, 1.2, "top-right"))
+        self.assertEqual((G.minimap["size"], G.minimap["opacity"], G.minimap["label_scale"], G.minimap["radius_km"], G.minimap["urban_km"], G.minimap["position"]), (None, 0.6, 1.0, 120.0, 1.2, "top-right"))
         self.assertEqual(G.minimap["presets"], {})
 
     def test_project_yaml_and_guion_override(self):
@@ -75,7 +76,7 @@ class PlanTest(unittest.TestCase):
     def plan(self, shots, **kw):
         G = make_project(shots, extra={"minimap": {"enabled": True}}, **kw)
         rep = ffx.Report()
-        return G, [render.overlay_plan(G, s, rep) for s in G.shots], rep
+        return G, render.caption_intervals(G, render.minimap_plans(G, rep), rep), rep
 
     def intervals(self, shots, **kw):
         G, _, rep = self.plan(shots, **kw)
@@ -135,46 +136,47 @@ class PlanTest(unittest.TestCase):
     def test_format_params_scale_by_short_side(self):
         cfg = minimap.cfg_with({})
         d = {f: minimap.params(cfg, f, wh) for f, wh in (("tv", (3840, 2160)), ("celu", (1920, 1080)), ("chat", (640, 360)), ("reel", (1080, 1920)))}
-        self.assertEqual(d["tv"]["D"], 216)
-        self.assertEqual(d["celu"]["D"], 108)
-        self.assertEqual(d["chat"]["D"], 50)
-        self.assertEqual(d["reel"]["D"], 173)
-        self.assertGreaterEqual(d["chat"]["min_px"], 11)
+        self.assertEqual(d["tv"]["D"], 302)
+        self.assertEqual(d["celu"]["D"], 151)
+        self.assertEqual(d["chat"]["D"], 65)
+        self.assertEqual(d["reel"]["D"], 205)
+        self.assertGreaterEqual(d["chat"]["fl"], 11)
         over = minimap.cfg_with({"presets": {"chat": {"diameter": 0.2}}})
         self.assertEqual(minimap.params(over, "chat", (640, 360))["D"], 72)
         with self.assertRaises(ValueError):
             minimap.cfg_with({"presets": {"tablet": {}}})
 
-    def test_chat_label_never_below_11px(self):
-        cfg = minimap.cfg_with({})
-        pr = minimap.params(cfg, "chat", (640, 360))
-        lines = minimap._label_lines("Mirador del Valle Largo", "2025-06-16T14:33:31+02:00", pr["D"], pr["S"], pr["size_mult"], pr["fit_mult"], pr["min_px"])
-        self.assertTrue(all(f.size >= 11 for _, f, _ in lines))
-
     def test_caption_params_per_format(self):
         c = overlay.cfg_with({})
         self.assertGreaterEqual(overlay.params(c, "chat", (640, 360))["fp"], 12)
-        self.assertEqual(overlay.params(c, "tv", (3840, 2160))["fp"], round(2160 * 0.018))
+        self.assertEqual(overlay.params(c, "tv", (3840, 2160))["fp"], round(2160 * 0.0252))
         self.assertEqual(overlay.params(overlay.cfg_with({"presets": {"tv": {"place": 0.03}}}), "tv", (3840, 2160))["fp"], round(2160 * 0.03))
 
-    def test_caption_window_and_short_shot(self):
-        G, plans, rep = self.plan([{"id": "drone.A", "dur": 6, "caption": {"place": "a", "line": "b"}}, {"id": "drone.A", "dur": 2.4, "caption": {"place": "c"}}, {"id": "drone.A", "dur": 6}])
-        w = plans[0]["cap"]
-        self.assertAlmostEqual(w["in"], 0.5, places=2)
-        self.assertAlmostEqual(w["out"], G.shots[0].n / float(G.fps) - G.shots[1].xn / float(G.fps) - overlay.FADE_S, places=2)
-        self.assertNotIn("cap", plans[1])
+    def test_caption_run_starts_after_the_shot_is_whole_and_ends_with_its_fade(self):
+        G, caps, rep = self.plan([{"id": "drone.A", "dur": 6, "caption": {"place": "a", "line": "b"}}, {"id": "drone.A", "dur": 6}])
+        place = next(c for c in caps if c["kind"] == "place")
+        fps = float(G.fps)
+        self.assertAlmostEqual(place["f0"] / fps, 0.5, places=1)
+        s0, s1 = G.shots
+        self.assertAlmostEqual(place["f1"] / fps, (s0.start + s0.n - s1.xn) / fps, places=1)
+
+    def test_short_run_has_no_caption(self):
+        G, caps, rep = self.plan([{"id": "drone.A", "dur": 2.4, "caption": {"place": "c"}}, {"id": "drone.A", "dur": 6}])
+        self.assertEqual(caps, [])
         self.assertTrue(any("caption omitido" in x for x in rep.warnings))
 
     def test_caption_waits_for_title(self):
-        G, plans, _ = self.plan([{"id": "drone.A", "dur": 9, "title": {"text": "t"}, "caption": {"place": "a"}}])
-        self.assertGreaterEqual(plans[0]["cap"]["in"], 4.0)
-        G, plans, rep = self.plan([{"id": "drone.A", "dur": 5, "title": {"text": "t"}, "caption": {"place": "a"}}])
-        self.assertNotIn("cap", plans[0])
+        G, caps, _ = self.plan([{"id": "drone.A", "dur": 9, "title": {"text": "t"}, "caption": {"place": "a"}}])
+        self.assertGreaterEqual(caps[0]["f0"] / float(G.fps), 4.0)
+        G, caps, rep = self.plan([{"id": "drone.A", "dur": 5, "title": {"text": "t"}, "caption": {"place": "a"}}])
+        self.assertEqual(caps, [])
 
-    def test_segments_carry_no_minimap(self):
-        G, plans, _ = self.plan([{"id": "drone.A", "dur": 6, "caption": {"place": "a"}}])
-        self.assertIn("cap", plans[0])
-        self.assertNotIn("mm", plans[0])
+    def test_segments_carry_no_captions_or_minimap(self):
+        G = make_project([{"id": "drone.A", "dur": 6, "caption": {"place": "a", "line": "b c"}}], extra={"minimap": {"enabled": True}})
+        with mock.patch.object(ffx, "sig", return_value=["x"]):
+            sp = render.spec_of(G, G.shots[0], "/x/A.MP4", ffx.Report())
+        self.assertNotIn("ov", sp)
+        self.assertNotIn("caption", json.dumps(sp))
 
 
 class PresetTest(unittest.TestCase):

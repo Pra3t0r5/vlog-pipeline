@@ -1,5 +1,7 @@
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
+import overlay
+
 BG = (480, 270)
 
 
@@ -79,27 +81,44 @@ def font(style, size):
     return ImageFont.truetype(style["font"], int(size))
 
 
+def wrap_font(style, text, size, max_w):
+    f = font(style, size)
+    lines = overlay.wrap(text, f, max_w)
+    widest = max(lines, key=f.getlength, default="")
+    if widest and f.getlength(widest) > max_w:
+        f = fit_font(style, widest, size, max_w)
+    return f, lines
+
+
 def title_png(t, W, H, style, out):
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     if H > W:
         x, y = int(W * 0.06), int(H * 0.60)
-        big = fit_font(style, t["text"], W * 0.085, W * 0.88)
-        small = fit_font(style, t.get("sub") or " ", W * 0.05, W * 0.88)
+        big, big_lines = wrap_font(style, t["text"], W * 0.085, W * 0.88)
+        small, small_lines = wrap_font(style, t.get("sub") or " ", W * 0.05, W * 0.88)
         gap = int(big.size * 1.35)
-        bottom = y + gap + (int(small.size * 1.4) if t.get("sub") else 0)
+        sgap = int(small.size * 1.4)
+        sub_y = y + gap * len(big_lines)
+        bottom = sub_y + (sgap * len(small_lines) if t.get("sub") else 0)
         d.rectangle([0, y - int(H * 0.02), W, bottom + int(H * 0.012)], fill=(0, 0, 0, 90))
-        d.text((x, y), t["text"], font=big, fill="white")
+        for i, ln in enumerate(big_lines):
+            d.text((x, y + gap * i), ln, font=big, fill="white")
         if t.get("sub"):
-            d.text((x, y + gap), t["sub"], font=small, fill=(230, 230, 230))
+            for i, ln in enumerate(small_lines):
+                d.text((x, sub_y + sgap * i), ln, font=small, fill=(230, 230, 230))
         im.save(out)
         return
-    big, small = font(style, H * 0.065), font(style, H * 0.035)
-    x, y = int(W * 0.05), int(H * 0.78)
+    big, big_lines = wrap_font(style, t["text"], H * 0.065, W * 0.9)
+    small, small_lines = wrap_font(style, t.get("sub") or " ", H * 0.035, W * 0.9)
+    step = int(H * 0.08)
+    x, y = int(W * 0.05), int(H * 0.78) - step * (len(big_lines) - 1) - (int(H * 0.045) * (len(small_lines) - 1) if t.get("sub") else 0)
     d.rectangle([0, y - int(H * 0.03), W, H], fill=(0, 0, 0, 90))
-    d.text((x, y), t["text"], font=big, fill="white")
+    for i, ln in enumerate(big_lines):
+        d.text((x, y + step * i), ln, font=big, fill="white")
     if t.get("sub"):
-        d.text((x, y + int(H * 0.08)), t["sub"], font=small, fill=(230, 230, 230))
+        for i, ln in enumerate(small_lines):
+            d.text((x, y + step * len(big_lines) + int(H * 0.045) * i), ln, font=small, fill=(230, 230, 230))
     im.save(out)
 
 
@@ -117,12 +136,12 @@ def card_png(card, W, H, style, bg_im, lines, out):
     else:
         img = Image.new("RGB", (W, H), card.get("bg", {}).get("color", style["card_color"]))
     blocks = []
-    if card.get("title"):
-        blocks.append((fit_font(style, card["title"], H * 0.085, W * 0.86), card["title"], (255, 255, 255), H * 0.02))
-    if card.get("sub"):
-        blocks.append((fit_font(style, card["sub"], H * 0.045, W * 0.86), card["sub"], (236, 226, 208), H * 0.03))
-    for ln in lines:
-        blocks.append((fit_font(style, ln, H * 0.036, W * 0.86), ln, (225, 215, 198), H * 0.012))
+    for text, size, col, gap in ([(card["title"], H * 0.085, (255, 255, 255), H * 0.02)] if card.get("title") else []) + (
+        [(card["sub"], H * 0.045, (236, 226, 208), H * 0.03)] if card.get("sub") else []
+    ) + [(ln, H * 0.036, (225, 215, 198), H * 0.012) for ln in lines]:
+        f, parts = wrap_font(style, text, size, W * 0.86)
+        for i, part in enumerate(parts):
+            blocks.append((f, part, col, gap if i == len(parts) - 1 else H * 0.008))
     heights = [b[0].getbbox(b[1])[3] + b[3] for b in blocks]
     y = (H - sum(heights)) / 2
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
