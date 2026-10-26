@@ -14,7 +14,7 @@ from PIL import Image, ImageOps
 import config
 import ffx
 
-REV = "g1"
+REV = "g2"
 LUMA_W = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 
 
@@ -49,7 +49,8 @@ def grade_filter(plan, yuv):
         return ""
     head = "scale=in_color_matrix=bt709:in_range=tv:out_color_matrix=bt709:out_range=pc," if yuv else ""
     cur = f"curves=all='{p['curve']}'"
-    vib = f"vibrance=intensity={p['vibrance']}" if p["vibrance"] else ""
+    k = plan.get("vib_k", 1.0)
+    vib = f"vibrance=intensity={round(p['vibrance'] * k, 3)}" if p["vibrance"] and k > 0 else ""
     parts = [f"{head}format=gbrp"] + ([vib, cur] if p.get("vib_first") else [cur, vib])
     parts = [x for x in parts if x]
     if plan.get("warm") and p["warm"]:
@@ -202,6 +203,7 @@ def probe_shot(G, s, report):
         out["srt"] = srt_frames(src, s.t_in, s.t_in + span) if rec.get("source") == "drone" and src.exists() else None
     ms = [measure(x) for x in frames]
     out["luma"] = float(np.mean([m["mean"] for m in ms]))
+    out["sat"] = float(np.mean([m["sat"] for m in ms]))
     mid = frames[len(frames) // 2]
     out["lap"] = float(np.median([lap_var(x) for x in frames]))
     out["rb"] = warmth(mid)
@@ -229,6 +231,15 @@ def zoom_reason(pr):
     if len(sr["focal"]) > 1:
         return f"focal_len cambia {sr['focal']}"
     return None
+
+
+def vibrance_taper(sat):
+    lo, hi = cfg("vibrance_taper")
+    if sat is None or sat <= lo:
+        return 1.0
+    if sat >= hi:
+        return 0.0
+    return round((hi - sat) / (hi - lo), 2)
 
 
 def is_night(pr, rec):
@@ -266,7 +277,7 @@ def plan(G, s, report):
     pr = None
     if g == "auto" or sh == "auto":
         pr = probe_shot(G, s, report)
-    prof, why, warm, dn = None, None, False, None
+    prof, why, warm, dn, vib_k = None, None, False, None, 1.0
     if g == "auto":
         if pr:
             night = is_night(pr, s.rec)
@@ -277,6 +288,7 @@ def plan(G, s, report):
             else:
                 prof = "day_drone" if s.rec.get("source") == "drone" else "day_phone"
                 warm = cfg("warm_rb")[0] <= pr["rb"] <= cfg("warm_rb")[1]
+                vib_k = vibrance_taper(pr.get("sat"))
             dn = denoise_tier(pr, bool(night))
     elif g != "none":
         prof = g
@@ -295,5 +307,7 @@ def plan(G, s, report):
     if not prof and not sharp:
         return None
     out = {"profile": prof, "sharpen": sharp, "dn": dn if prof == "night" else None, "warm": warm}
+    if vib_k < 1.0:
+        out["vib_k"] = vib_k
     s.ginfo = {"plan": out, "night": why, "zoom": zr, "lap": pr["lap"] if pr else None, "luma": pr["luma"] if pr else None}
     return out

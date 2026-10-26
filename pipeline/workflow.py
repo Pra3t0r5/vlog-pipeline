@@ -34,12 +34,16 @@ def approve(proj, gate):
     return a
 
 
+def built(proj, filename):
+    return any((d / filename).exists() for d in (proj, proj / "build"))
+
+
 def output_done(proj, cfg, preset):
     name = cfg.get("name")
-    files = [proj / f"{name}-{preset}.mp4"]
+    files = [f"{name}-{preset}.mp4"]
     if preset == "tv":
-        files.append(proj / f"{name}-final.mp4")
-    return any(f.exists() for f in files)
+        files.append(f"{name}-final.mp4")
+    return any(built(proj, f) for f in files)
 
 
 def stage_defs(proj, cfg):
@@ -66,7 +70,7 @@ def stage_defs(proj, cfg):
         ("captions", "Captions y lugares", "subagente", f"vlog prompt captions -> subagente {m['captions']}", tk["captions"], lambda: (proj / "captions.json").exists(), False),
         ("music", "Música y créditos", "director", music_cmd, tk["music"], lambda: (proj / "music" / "credits.json").exists(), False),
         ("guion", "Guion desde la EDL", "cli", "python -I pipeline/edl2guion.py <proyecto> --edl edl.json --out guion.json", tk["guion"], lambda: guion.exists(), False),
-        ("preview", f"Preview ({p['preview_iterations']} iteración/es)", "cli", "vlog preview", tk["preview"], lambda: (proj / f"{cfg.get('name')}-preview.mp4").exists(), False),
+        ("preview", f"Preview ({p['preview_iterations']} iteración/es)", "cli", "vlog preview", tk["preview"], lambda: built(proj, f"{cfg.get('name')}-preview.mp4"), False),
         ("preview_ok", "OK del dueño al preview", "dueño", "mostrar el preview y, con su OK, `vlog approve preview`", tk["preview_ok"], lambda: "preview" in ap, False),
         ("final", "Final y salidas", "cli", "vlog final && vlog render", tk["final"], lambda: output_done(proj, cfg, "tv"), False),
         ("reel", "Reel vertical", "subagente", f"vlog prompt reel -> subagente {m['reel']}; luego vlog render reel", tk["reel"], lambda: output_done(proj, cfg, "reel"), not costmode.reel_wanted(cfg)),

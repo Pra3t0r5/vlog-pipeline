@@ -18,6 +18,7 @@ def main(argv):
     path = pathlib.Path(argv[0])
     video = pathlib.Path(argv[1])
     outdir = pathlib.Path(argv[2])
+    outdir.mkdir(parents=True, exist_ok=True)
     G = guion.Guion(str(path), "preview")
     G.resolve(ffx.Report())
     rv = config.section("review")

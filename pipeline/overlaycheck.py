@@ -71,7 +71,7 @@ def compose(fmt, W, H, case, route, labels, font):
     frame.alpha_composite(mm)
     lay = overlay.caption_layout(case["cap_place"], [case["cap_line"]], W, H, font, None, fmt)
     tmp = pathlib.Path(tempfile.mkdtemp())
-    for name, xy, draw in (("p", overlay.place_xy(lay), lambda f: overlay.place_png(lay, f)), ("d", overlay.desc_xy(lay), lambda f: overlay.desc_png(lay, case["cap_line"], f))):
+    for name, xy, draw in (("p", overlay.place_xy(lay), lambda f: overlay.place_png(lay, f)), ("d", overlay.desc_xy(lay, case["cap_line"]), lambda f: overlay.desc_png(lay, case["cap_line"], f))):
         draw(tmp / f"{name}.png")
         frame.alpha_composite(Image.open(tmp / f"{name}.png").convert("RGBA"), (xy[0], xy[1]))
     return frame.convert("RGB"), typo

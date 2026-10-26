@@ -2,7 +2,7 @@
 
 Produce `captions.json`: `{id: {place, line, confidence, sources}}` para las tomas con `keep >= 2`. Se imprime rellena con `vlog prompt captions`. Alcance según el modo de costo: standard investiga en la web un dato interesante y verificado para cada lugar (`line`), con su URL; low solo completa `place` y deja `line` en `null`, sin investigación.
 
-Parámetros: `{{project}}`, `{{media}}`, `{{index}}`, `{{triage}}`, `{{chronology}}`, `{{out_file}}`, `{{captions_scope}}`.
+Parámetros: `{{project}}`, `{{media}}`, `{{index}}`, `{{triage}}`, `{{chronology}}`, `{{captions}}`, `{{captions_scope}}`.
 
 Reglas del director:
 - Se lanza después de que la EDL existe: alcanza con las tomas de la EDL más las `keep >= 2`.
@@ -25,4 +25,4 @@ Reglas:
 - No repitas en la `line` el nombre del `place` ni la fecha: ya están en pantalla (en el caption y en la etiqueta del minimapa).
 - Nunca rotules momentos del `avoid` de la cronología.
 
-Escribí con la herramienta Write un único JSON en {{out_file}}: `{"<id de media>": {"place": "...", "line": "dato de hasta 12 palabras", "confidence": "high", "sources": [{"title": "...", "url": "https://..."}]}}` (con `line` null, `sources` vacía). Tu respuesta final es UNA línea: "N tomas, M con dato".
+Escribí con la herramienta Write un único JSON en {{captions}}: `{"<id de media>": {"place": "...", "line": "dato de hasta 12 palabras", "confidence": "high", "sources": [{"title": "...", "url": "https://..."}]}}` (con `line` null, `sources` vacía). Tu respuesta final es UNA línea: "N tomas, M con dato".
