@@ -71,6 +71,16 @@ class Status(unittest.TestCase):
         self.assertTrue(low["reel"]["optional"])
         self.assertFalse(std["reel"]["optional"])
 
+    def test_preview_and_final_rendered_into_build_count_as_done(self):
+        proj = self.project("low")
+        cfg = cli.load(proj)
+        (proj / "build").mkdir(exist_ok=True)
+        (proj / "build" / "demo-preview.mp4").write_bytes(b"x")
+        (proj / "build" / "demo-tv.mp4").write_bytes(b"x")
+        ids = {s["id"]: s["done"] for s in workflow.compute(proj, cfg)["stages"]}
+        self.assertTrue(ids["preview"])
+        self.assertTrue(ids["final"])
+
     def test_preview_needs_the_owner_ok_before_final(self):
         proj = self.project("low")
         cfg = cli.load(proj)
