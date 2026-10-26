@@ -31,7 +31,7 @@ No es un editor gráfico ni un servicio: es un conjunto de scripts de Python y f
 ## Instalación
 
 ```bash
-git clone <url-del-repositorio> vlog-pipeline
+git clone https://github.com/Pra3t0r5/vlog-pipeline.git
 cd vlog-pipeline
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
