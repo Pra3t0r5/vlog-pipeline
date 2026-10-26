@@ -42,7 +42,13 @@ def sheet_groups(proj, sheets_dir="sheets"):
     if not (d / "manifest.json").exists():
         raise TriageError(f"falta {d / 'manifest.json'}: corré `vlog sheets`")
     man = load_json(d / "manifest.json")
-    idx = load_json(d / "index.json")["sheets"]
+    if "sheets" not in man:
+        man = {"sheets": {k: v for k, v in man.items() if isinstance(v, dict) and "day" in v}}
+    man.setdefault("frames", 6)
+    for s in man["sheets"].values():
+        s.setdefault("tokens_est", s.get("tokens", 0))
+    idx_raw = load_json(d / "index.json")
+    idx = idx_raw.get("sheets") or {k: v for k, v in idx_raw.items() if isinstance(v, list)}
     groups = {}
     for name in sorted(man["sheets"]):
         g = groups.setdefault(man["sheets"][name]["day"], {"sheets": [], "codes": []})
