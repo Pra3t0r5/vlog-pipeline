@@ -302,6 +302,7 @@ Identifican el proyecto; no tienen valor de fábrica.
 | `musicmix.lag_ms` | `30` | Búsqueda de alineación fina de cada empalme. |
 | `musicmix.search_tol_s` | `0.4` | Tolerancia de duración al buscar caminos. |
 | `musicmix.gap_bars` | `16` | Compases antes de poder repetir un mismo compás sin penalización. |
+| `musicmix.trim_fade_s` | `3.0` | Cuando el objetivo es más corto que el tema y la búsqueda de empalmes no encuentra un camino (típico de un reel), el tema se recorta desde el principio con este fundido final (como mucho un cuarto de la duración). |
 | `musicmix.loudnorm` | `-16 / -1.5 / 11` | `lufs`, `tp` y `lra` de la normalización final. |
 
 ## Variables de entorno

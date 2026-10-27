@@ -22,7 +22,7 @@ BPB = 4
 POOL = 2
 TOL_S = 0.5
 GUION_KEYS = ("target_s", "total_s", "duration_s", "total_duration_s", "total_duration", "duration")
-SR = WIN_BEATS = MIN_PLAY_BARS = MIN_LOOP_S = HEAD_TRIM_CAP = LAG_MS = SEARCH_TOL_S = GAP_BARS = DEFAULT_TARGET = None
+SR = WIN_BEATS = MIN_PLAY_BARS = MIN_LOOP_S = HEAD_TRIM_CAP = LAG_MS = SEARCH_TOL_S = GAP_BARS = DEFAULT_TARGET = TRIM_FADE_S = None
 LOUDNORM = None
 
 
@@ -30,7 +30,7 @@ def configure(project_cfg=None):
     cfg = config.activate(project_cfg)
     mm = cfg["musicmix"]
     g = globals()
-    for key in ("sr", "win_beats", "min_play_bars", "min_loop_s", "head_trim_cap", "lag_ms", "search_tol_s", "gap_bars"):
+    for key in ("sr", "win_beats", "min_play_bars", "min_loop_s", "head_trim_cap", "lag_ms", "search_tol_s", "gap_bars", "trim_fade_s"):
         g[key.upper()] = mm[key]
     g["DEFAULT_TARGET"] = mm["default_target_s"]
     g["LOUDNORM"] = mm["loudnorm"]
@@ -464,6 +464,28 @@ def snippets(wav, out_path, joins_rep, total):
     return files
 
 
+def trim_fade_filter(target, fade_s):
+    fade = min(fade_s, target / 4)
+    return f"afade=t=in:d=0.05,afade=t=out:st={target - fade:.3f}:d={fade:.3f}"
+
+
+def trim_with_fade(src, out, target, a, tsrc):
+    raw = pathlib.Path(src).with_name("trim.wav")
+    sh(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-t", f"{target:.3f}", "-af", trim_fade_filter(target, TRIM_FADE_S), "-c:a", "pcm_f32le", str(raw)])
+    loudnorm_two_pass(raw, out)
+    lufs, peak = measure_lufs(out)
+    final_dur = sf.info(str(out)).duration
+    rep = {
+        "input": a.input, "output": str(out), "target_s": target, "target_source": tsrc, "mode": "trim",
+        "final_duration_s": round(final_dur, 3), "duration_error_s": round(final_dur - target, 3),
+        "fade_out_s": round(min(TRIM_FADE_S, target / 4), 3), "n_joins": 0, "worst_join_score": None,
+        "lufs_integrated": lufs, "true_peak_dbfs": peak, "joins_standing_out": [],
+    }
+    path = pathlib.Path(a.report) if a.report else out.with_suffix(".json")
+    path.write_text(json.dumps(rep, indent=1, default=float))
+    print(json.dumps({k: rep[k] for k in ("mode", "target_s", "final_duration_s", "n_joins", "lufs_integrated")}))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input")
@@ -488,7 +510,12 @@ def main():
         A = analyze(str(src))
         x, _ = sf.read(src, dtype="float32", always_2d=True)
         cap = 0.4 if a.intro_keep else HEAD_TRIM_CAP
-        joins, segs, pairs, P = plan(A, target, cap)
+        try:
+            joins, segs, pairs, P = plan(A, target, cap)
+        except RuntimeError:
+            if target >= len(x) / SR:
+                raise
+            return trim_with_fade(src, out, target, a, tsrc)
         total = float(sum(P.db[b] - P.db[s0] if s0 > 0 else P.db[b] for s0, b in segs[:-1]) + (P.end - P.db[segs[-1][0]]))
         trim_head = max(0.0, total - target) if not a.intro_keep else 0.0
         allsc = np.array([p["score"] for p in pairs])
