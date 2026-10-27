@@ -671,16 +671,21 @@ def output_entries(cfg):
     return out
 
 
+def default_guion(preset):
+    return "guion-reel.json" if preset == "reel" else None
+
+
 def cmd_render(a):
     proj = find_project(a.project)
     cfg = load(proj)
-    entries = [(p, None) for p in a.presets] if a.presets else output_entries(cfg)
+    declared = dict(output_entries(cfg))
+    entries = [(p, declared.get(p)) for p in a.presets] if a.presets else output_entries(cfg)
     if not entries:
         die("sin presets: pasalos como argumento o listalos en outputs: de project.yaml")
     for preset, guion_rel in entries:
         if preset not in presets.ALL:
             die(f"preset desconocido '{preset}' (válidos: {', '.join(presets.ALL)})")
-        g = proj / (guion_rel or cfg.get("guion", "guion.json"))
+        g = proj / (guion_rel or default_guion(preset) or cfg.get("guion", "guion.json"))
         if not g.exists():
             die(f"falta {g} para el preset {preset}")
         run([PY, PIPE / "render.py", g, preset])

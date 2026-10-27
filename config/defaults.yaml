@@ -359,4 +359,5 @@ musicmix:
   lag_ms: 30
   search_tol_s: 0.4
   gap_bars: 16
+  trim_fade_s: 3.0            # si el tema es más largo que el objetivo y no hay empalme posible: se recorta desde el principio con este fundido final
   loudnorm: {lufs: -16.0, tp: -1.5, lra: 11.0}
